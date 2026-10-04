@@ -382,7 +382,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <g
           transform="translate({item.renderX}, {item.renderY})"
-          style="transform: translate({item.renderX}px, {item.renderY}px); transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); will-change: transform;"
+          style="transform: translate({item.renderX}px, {item.renderY}px); transition: transform 0.65s cubic-bezier(0.34, 1.3, 0.64, 1); will-change: transform;"
           class="pawn-node {item.isEligible ? 'cursor-pointer is-eligible' : ''}"
           filter={item.isEligible ? 'url(#active-glow)' : 'url(#pawn-shadow)'}
           onclick={() => {

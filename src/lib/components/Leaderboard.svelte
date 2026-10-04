@@ -2,12 +2,12 @@
   let { leaderboard = [], onClose = () => {} } = $props();
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-  <div class="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-4">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-      <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+  <div class="w-full max-w-lg bg-white border-4 border-black p-6 shadow-[8px_8px_0px_#000] space-y-4 text-black">
+    <div class="flex items-center justify-between border-b-3 border-black pb-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 bg-[#FFE600] text-black flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_#000]">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
             <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
             <path d="M4 22h16" />
@@ -16,14 +16,14 @@
             <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
           </svg>
         </div>
-        <h2 class="text-lg font-bold text-white">Peringkat & Statistik Pemain</h2>
+        <h2 class="text-lg font-black uppercase tracking-tight text-black">Papan Peringkat</h2>
       </div>
       <button
         onclick={onClose}
-        class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+        class="text-black hover:bg-slate-200 p-1 border-2 border-black shadow-[1px_1px_0px_#000] transition"
         aria-label="Tutup dialog"
       >
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18" />
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
@@ -32,52 +32,37 @@
 
     <!-- Table of stats from SQLite -->
     {#if leaderboard.length === 0}
-      <!-- Empty State (Antislop R-27) -->
       <div class="py-10 text-center space-y-2">
-        <div class="w-10 h-10 mx-auto text-slate-600 flex items-center justify-center">
-          <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="20" x2="18" y2="10" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6" y1="20" x2="6" y2="14" />
-          </svg>
-        </div>
-        <p class="text-sm text-slate-400 font-medium">Belum ada statistik pertandingan tersimpan.</p>
-        <p class="text-xs text-slate-500">Selesaikan game pertama untuk mencatatkan namamu di papan peringkat!</p>
+        <p class="text-sm font-black text-black uppercase">Belum ada statistik pertandingan tersimpan.</p>
+        <p class="text-xs text-slate-700 font-bold">Selesaikan game pertama untuk mencatatkan namamu di papan peringkat!</p>
       </div>
     {:else}
-      <div class="overflow-x-auto max-h-80">
-        <table class="w-full text-left text-xs text-slate-300">
-          <thead class="text-[11px] uppercase tracking-wider text-slate-500 bg-slate-950/50 sticky top-0">
+      <div class="overflow-x-auto max-h-80 border-2 border-black">
+        <table class="w-full text-left text-xs text-black border-collapse">
+          <thead class="text-[11px] uppercase tracking-wider bg-[#FFE600] border-b-2 border-black sticky top-0 font-black">
             <tr>
-              <th class="py-2.5 px-3">No</th>
-              <th class="py-2.5 px-3">Pemain</th>
-              <th class="py-2.5 px-3 text-center">Menang</th>
-              <th class="py-2.5 px-3 text-center">Main</th>
-              <th class="py-2.5 px-3 text-center">Makan</th>
+              <th class="py-2.5 px-3 border-r border-black">No</th>
+              <th class="py-2.5 px-3 border-r border-black">Pemain</th>
+              <th class="py-2.5 px-3 text-center border-r border-black">Menang</th>
+              <th class="py-2.5 px-3 text-center border-r border-black">Main</th>
+              <th class="py-2.5 px-3 text-center border-r border-black">Makan</th>
               <th class="py-2.5 px-3 text-center">Roll 6</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-800 font-mono">
+          <tbody class="divide-y divide-black font-mono">
             {#each leaderboard as player, idx}
-              <tr class="hover:bg-slate-800/40 transition">
-                <td class="py-2 px-3 text-slate-500 font-sans">{idx + 1}</td>
-                <td class="py-2 px-3 font-bold font-sans text-white">{player.name}</td>
-                <td class="py-2 px-3 text-center font-bold text-amber-400">{player.games_won}</td>
-                <td class="py-2 px-3 text-center text-slate-400">{player.games_played}</td>
-                <td class="py-2 px-3 text-center text-rose-400">{player.total_captures}</td>
-                <td class="py-2 px-3 text-center text-indigo-400">{player.total_sixes}</td>
+              <tr class="hover:bg-amber-100/60 transition">
+                <td class="py-2 px-3 font-sans font-bold border-r border-black">{idx + 1}</td>
+                <td class="py-2 px-3 font-black font-sans uppercase border-r border-black">{player.name}</td>
+                <td class="py-2 px-3 text-center font-black text-black border-r border-black">{player.games_won}</td>
+                <td class="py-2 px-3 text-center font-bold text-slate-700 border-r border-black">{player.games_played}</td>
+                <td class="py-2 px-3 text-center font-bold text-rose-600 border-r border-black">{player.total_captures}</td>
+                <td class="py-2 px-3 text-center font-bold text-blue-600">{player.total_sixes}</td>
               </tr>
             {/each}
           </tbody>
         </table>
       </div>
     {/if}
-
-    <button
-      onclick={onClose}
-      class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl transition text-xs"
-    >
-      Tutup
-    </button>
   </div>
 </div>

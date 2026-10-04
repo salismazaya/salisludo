@@ -2,9 +2,9 @@ import { computeTokenTargetPosition, isSafeSquare } from './Board.js';
 import { generateChallenge } from './MathDice.js';
 
 export class LudoGame {
-  constructor({ id, defaultTimer = 10, players }) {
+  constructor({ id, defaultTimer = 5, players }) {
     this.id = id;
-    this.defaultTimer = Number(defaultTimer) || 10;
+    this.defaultTimer = Math.min(5, Math.max(3, Number(defaultTimer) || 5));
     this.currentTurnTimer = this.defaultTimer;
     this.players = players; // array of { id, name, color }
     this.currentTurnIndex = 0;
@@ -173,10 +173,10 @@ export class LudoGame {
 
     if (getsBonus) {
       if (this.pendingRoll.extraTurn) {
-        // Roll 6 / -6: timer is halved (minimum 2s)
-        this.currentTurnTimer = Math.max(2, Math.floor(this.currentTurnTimer / 2));
+        // Roll 6 / -6: timer berkurang (3 detik)
+        this.currentTurnTimer = 3;
       } else {
-        // Capture / Home bonus: full timer reset
+        // Capture / Home bonus: full timer reset (default max 5 detik)
         this.currentTurnTimer = this.defaultTimer;
       }
       this.pendingRoll = null;
@@ -200,7 +200,7 @@ export class LudoGame {
 
   nextTurn() {
     this.consecutiveSixes = 0;
-    this.currentTurnTimer = this.defaultTimer;
+    this.currentTurnTimer = this.defaultTimer; // Kembali ke default 5 detik
     this.pendingRoll = null;
     this.currentChallenge = null;
     this.state = 'WAITING_FOR_SPIN';

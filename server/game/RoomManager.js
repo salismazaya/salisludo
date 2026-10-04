@@ -32,7 +32,7 @@ export class RoomManager {
     const room = {
       code,
       hostName,
-      defaultTimer: Number(defaultTimer) || 10,
+      defaultTimer: Number(defaultTimer) || 5,
       maxPlayers: Math.min(4, Math.max(2, Number(maxPlayers) || 4)),
       status: 'LOBBY', // 'LOBBY' | 'PLAYING' | 'FINISHED'
       players: [],

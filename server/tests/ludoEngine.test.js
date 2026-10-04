@@ -13,7 +13,7 @@ describe('LudoGame Engine (4 Players)', () => {
     });
 
     expect(game.currentTurnIndex).toBe(0);
-    expect(game.currentTurnTimer).toBe(10);
+    expect(game.currentTurnTimer).toBe(5);
     expect(game.tokens['p1']).toHaveLength(4);
     expect(game.tokens['p1'][0]).toEqual({ id: 0, type: 'YARD', index: 0 });
   });
@@ -37,13 +37,13 @@ describe('LudoGame Engine (4 Players)', () => {
     expect(moveResult.success).toBe(true);
     expect(game.tokens['p1'][0]).toEqual({ id: 0, type: 'TRACK', index: 0 });
     expect(game.currentTurnPlayer.id).toBe('p1'); // Alice plays again
-    expect(game.currentTurnTimer).toBe(5); // 10 / 2 = 5 seconds
+    expect(game.currentTurnTimer).toBe(3); // 3 seconds on roll 6 extra turn
 
     // Alice rolls 6 again
     game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
     game.moveToken('p1', 0);
     expect(game.currentTurnPlayer.id).toBe('p1');
-    expect(game.currentTurnTimer).toBe(2); // 5 / 2 = 2 seconds (min 2)
+    expect(game.currentTurnTimer).toBe(3); // Tetap 3 detik pada giliran ekstra 6
   });
 
   it('captures opponent token on non-safe square, sends to yard, and awards extra turn', () => {

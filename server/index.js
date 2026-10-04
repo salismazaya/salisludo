@@ -86,6 +86,59 @@ function startCountdownTimer(room) {
 
     if (timeLeft <= 0) {
       roomManager.stopTimer(room.code);
+
+      // Jika kehabisan waktu saat memilih angka (WAITING_FOR_INPUT), server pilihkan angka random!
+      if (room.game.state === 'WAITING_FOR_INPUT' && room.game.currentChallenge) {
+        const challenge = room.game.currentChallenge;
+        const randomInput = Math.floor(Math.random() * 41) - 20; // -20..20
+        const autoRoll = calculateRollWithInput({
+          screenNumber: challenge.screenNumber,
+          op: challenge.op,
+          userInput: randomInput
+        });
+        const rollMeta = room.game.applyRoll(autoRoll);
+
+        recordRollLog(db, {
+          roomCode: room.code,
+          playerName: room.game.currentTurnPlayer.name,
+          ...autoRoll
+        });
+
+        io.to(room.code).emit('dice_rolled', {
+          roll: autoRoll,
+          validTokenIds: rollMeta.validTokenIds,
+          autoSkip: rollMeta.autoSkip,
+          penalty: rollMeta.penalty
+        });
+
+        // Hentikan timer dan tunggu pemain memilih bidak
+        room.timeLeft = null;
+        io.to(room.code).emit('timer_tick', {
+          timeLeft: null,
+          totalTimer: room.game.currentTurnTimer,
+          activePlayerId: room.game.currentTurnPlayer.id,
+          currentChallenge: challenge,
+          gameState: room.game.state,
+          tokens: room.game.tokens,
+          validTokenIds: rollMeta.validTokenIds,
+          isPaused: true
+        });
+
+        if (rollMeta.autoSkip) {
+          setTimeout(() => {
+            room.game.nextTurn();
+            room.timeLeft = room.game.currentTurnTimer;
+            io.to(room.code).emit('turn_passed', {
+              nextPlayer: room.game.currentTurnPlayer,
+              currentTimer: room.game.currentTurnTimer,
+              currentChallenge: null
+            });
+            notifyTurnPaused(room);
+          }, 1500);
+        }
+        return;
+      }
+
       // Timeout auto pass to next player
       room.game.nextTurn();
       room.timeLeft = room.game.currentTurnTimer;
@@ -111,7 +164,8 @@ io.on('connection', (socket) => {
       socket.data.sessionId = safeSessionId;
 
       const dbPlayer = getOrCreatePlayer(db, name);
-      const room = roomManager.createRoom({ hostName: name, defaultTimer: timer, maxPlayers });
+      const safeTimer = Math.min(5, Math.max(3, Number(timer) || 5));
+      const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers });
       const joinRes = roomManager.joinRoom({
         code: room.code,
         socketId: socket.id,
