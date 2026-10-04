@@ -88,7 +88,7 @@
         </svg>
       </div>
       <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">
-        Ludo Dadu Matematika
+        SalisLudo
       </h1>
       <p class="text-sm text-slate-400">
         Multiplayer 2 sampai 4 pemain dengan dadu persamaan matematika dan safe zone.

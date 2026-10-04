@@ -34,8 +34,20 @@ const HOST = process.env.HOST || '0.0.0.0';
 const db = createDb(process.env.DB_PATH || 'ludo.db');
 const roomManager = new RoomManager();
 
-// Timer broadcast loop
-function startTurnTimer(room) {
+// Timer helpers
+function notifyTurnPaused(room) {
+  roomManager.stopTimer(room.code);
+  room.timeLeft = room.game.currentTurnTimer;
+  io.to(room.code).emit('timer_tick', {
+    timeLeft: room.game.currentTurnTimer,
+    totalTimer: room.game.currentTurnTimer,
+    activePlayerId: room.game.currentTurnPlayer.id,
+    currentChallenge: null,
+    isPaused: true
+  });
+}
+
+function startCountdownTimer(room) {
   roomManager.stopTimer(room.code);
   let timeLeft = room.game.currentTurnTimer;
   room.timeLeft = timeLeft;
@@ -62,7 +74,7 @@ function startTurnTimer(room) {
 
     if (timeLeft <= 0) {
       roomManager.stopTimer(room.code);
-      // Timeout auto pass
+      // Timeout auto pass to next player
       room.game.nextTurn();
       room.timeLeft = room.game.currentTurnTimer;
       io.to(room.code).emit('turn_timeout', {
@@ -70,7 +82,7 @@ function startTurnTimer(room) {
         currentTimer: room.game.currentTurnTimer,
         currentChallenge: null
       });
-      startTurnTimer(room);
+      notifyTurnPaused(room);
     }
   }, 1000);
 
@@ -180,7 +192,7 @@ io.on('connection', (socket) => {
         currentTimer: res.room.game.currentTurnTimer,
         currentChallenge: null
       });
-      startTurnTimer(res.room);
+      notifyTurnPaused(res.room);
       callback({ success: true });
     } catch (err) {
       console.error('Error in start_game:', err);
@@ -205,6 +217,9 @@ io.on('connection', (socket) => {
         activePlayerId: activeId,
         currentChallenge: challenge
       });
+
+      // Start countdown timer ONLY after player rolls
+      startCountdownTimer(room);
 
       callback?.({ success: true, challenge });
     } catch (err) {
@@ -282,7 +297,7 @@ io.on('connection', (socket) => {
             currentTimer: room.game.currentTurnTimer,
             currentChallenge: null
           });
-          startTurnTimer(room);
+          notifyTurnPaused(room);
         }, 2000);
       }
 
@@ -324,7 +339,7 @@ io.on('connection', (socket) => {
       });
 
       if (!moveRes.finished) {
-        startTurnTimer(room);
+        notifyTurnPaused(room);
       } else {
         roomManager.stopTimer(room.code);
       }

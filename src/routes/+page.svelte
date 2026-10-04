@@ -261,7 +261,7 @@
 </script>
 
 <svelte:head>
-  <title>Ludo Dadu Matematika - Multiplayer</title>
+  <title>SalisLudo - Multiplayer</title>
 </svelte:head>
 
 <main class="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-3 sm:p-6">
@@ -279,7 +279,7 @@
         </svg>
       </div>
       <span class="font-extrabold text-base sm:text-lg tracking-tight text-white">
-        Ludo Dadu Matematika
+        SalisLudo
       </span>
     </div>
 
@@ -417,7 +417,7 @@
 
   <!-- Footer Info -->
   <footer class="text-center py-4 text-xs text-slate-600">
-    Ludo Dadu Matematika &bull; Input angka untuk dikalkulasikan dengan angka layar &bull; 6 atau -6 bergerak dua kali atau keluarkan bidak
+    SalisLudo &bull; Rentang angka -20 s.d. 20 &bull; 6 atau -6 bergerak dua kali atau keluarkan bidak
   </footer>
 
   <!-- Leaderboard Modal Dialog -->
