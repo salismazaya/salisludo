@@ -22,6 +22,7 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const db = createDb(process.env.DB_PATH || 'ludo.db');
 const roomManager = new RoomManager();
 
@@ -210,6 +211,6 @@ if (fs.existsSync(buildHandlerPath)) {
   });
 }
 
-server.listen(PORT, () => {
-  console.log(`Ludo Math Dice Server running on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Ludo Math Dice Server running on http://${HOST}:${PORT}`);
 });
