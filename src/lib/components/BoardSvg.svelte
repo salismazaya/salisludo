@@ -393,8 +393,16 @@
         >
           <!-- Active Pulsing Target Rings for Eligible Tokens -->
           {#if item.isEligible}
-            <circle cx="0" cy="0" r="19" fill="none" stroke="#ffffff" stroke-width="2.5" class="animate-ping opacity-75" />
-            <circle cx="0" cy="0" r="17" fill="none" stroke="#facc15" stroke-width="2" stroke-dasharray="3,3" />
+            <circle cx="0" cy="0" r="20" fill="none" stroke="#ffffff" stroke-width="2.5" class="animate-ping opacity-75" />
+            <circle cx="0" cy="0" r="18" fill="none" stroke="#facc15" stroke-width="2.5" stroke-dasharray="3,3" />
+            <!-- Floating Animated Pointer Arrow above token -->
+            <path
+              d="M -5,-26 L 5,-26 L 0,-20 Z"
+              fill="#facc15"
+              stroke="#0f172a"
+              stroke-width="1"
+              class="animate-bounce"
+            />
           {/if}
 
           <!-- Pawn Shadow -->

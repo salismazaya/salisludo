@@ -367,6 +367,7 @@
         {currentRoll}
         onSpin={handleSpinDice}
         onRoll={handleRollDice}
+        onSelectToken={handleSelectToken}
       />
 
       <!-- Scalable SVG Board (15x15 Classic Grid) -->

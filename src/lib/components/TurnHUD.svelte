@@ -11,7 +11,8 @@
     currentChallenge = null,
     currentRoll = null,
     onSpin = () => {},
-    onRoll = () => {}
+    onRoll = () => {},
+    onSelectToken = () => {}
   } = $props();
 
   let userNumberInput = $state('');
@@ -39,6 +40,33 @@
     onRoll(Math.round(num));
     userNumberInput = '';
   }
+
+  // Format dadu seperti +1, +2, -1, -6, +6, 0
+  const diceDisplay = $derived.by(() => {
+    if (!currentRoll) return null;
+    if (currentRoll.raw === 0 || currentRoll.steps === 0) {
+      return {
+        signText: '0',
+        badgeColor: 'bg-slate-800 text-slate-200 border-slate-700',
+        label: 'DIAM DI TEMPAT',
+        sub: '0 Langkah'
+      };
+    }
+    if (currentRoll.direction === 'FORWARD') {
+      return {
+        signText: `+${currentRoll.steps}`,
+        badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+        label: 'MAJU',
+        sub: `${currentRoll.steps} Langkah`
+      };
+    }
+    return {
+      signText: `-${currentRoll.steps}`,
+      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+      label: 'MUNDUR',
+      sub: `${currentRoll.steps} Langkah`
+    };
+  });
 </script>
 
 <div class="w-full max-w-xl mx-auto bg-slate-900/95 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md space-y-3">
@@ -125,7 +153,7 @@
 
     {:else if gameState !== 'WAITING_FOR_MOVE' && currentChallenge}
       <!-- STEP 2: Soal Muncul Setelah Roll Dadu (Timer Berjalan) -->
-      <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+      <div class="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
         <div class="flex items-center justify-between text-xs">
           <span class="text-slate-400 font-semibold uppercase tracking-wider">
             Tentukan Angka Kalkulasimu
@@ -136,18 +164,18 @@
         </div>
 
         <!-- Equation Visual with Manual Input (TANPA SHORTCUT CHEAT) -->
-        <div class="flex items-center justify-center gap-2 font-mono text-lg font-black text-white py-1">
-          <span class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-indigo-400">
+        <div class="flex items-center justify-center gap-2 font-mono text-xl font-black text-white py-1">
+          <span class="px-3.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-indigo-400">
             {currentChallenge.screenNumber}
           </span>
-          <span class="text-xl text-amber-400">
+          <span class="text-2xl text-amber-400">
             {currentChallenge.op}
           </span>
           <input
             type="number"
             bind:value={userNumberInput}
             placeholder="Ketik angka..."
-            class="w-36 px-3 py-1.5 bg-slate-900 border border-indigo-500/50 rounded-lg text-center text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+            class="w-36 px-3.5 py-1.5 bg-slate-900 border border-indigo-500/50 rounded-lg text-center text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
             onkeydown={(e) => {
               if (e.key === 'Enter') handleSubmitRoll();
             }}
@@ -174,60 +202,114 @@
       </div>
 
     {:else if gameState === 'WAITING_FOR_MOVE'}
-      <!-- STEP 3: Hasil Kalkulasi Non-blocking & Instruksi Memilih Bidak -->
-      <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
-        <div class="flex items-center justify-between text-xs border-b border-slate-800/80 pb-2">
-          <span class="text-slate-400 font-semibold uppercase tracking-wider">Hasil Dadu Matematika</span>
-          <span class="text-[11px] font-mono text-indigo-400 font-bold">
-            ({currentRoll?.a ?? 0}) {currentRoll?.op ?? '+'} ({currentRoll?.b ?? 0}) = {currentRoll?.raw ?? 0}
-          </span>
-        </div>
+      <!-- STEP 3: TAMPILAN DADU SUPER JELAS (+1, +2, -1, -6, +6) & WAJIB PILIH BIDAK -->
+      <div class="space-y-3">
+        <!-- Kartu Dadu Jelas -->
+        <div class="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between text-xs border-b border-slate-800/80 pb-2">
+            <span class="text-slate-400 font-semibold uppercase tracking-wider">Kalkulasi Matematika</span>
+            <span class="font-mono text-indigo-400 font-bold text-xs">
+              ({currentRoll?.a ?? 0}) {currentRoll?.op ?? '+'} ({currentRoll?.b ?? 0}) = {currentRoll?.raw ?? 0}
+            </span>
+          </div>
 
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            {#if currentRoll?.raw === 0}
-              <span class="text-sm font-bold text-slate-400">Diam di Tempat (0 Langkah)</span>
-            {:else}
-              <span class="text-sm font-black {currentRoll?.direction === 'FORWARD' ? 'text-emerald-400' : 'text-rose-400'}">
-                {currentRoll?.direction === 'FORWARD' ? 'MAJU' : 'MUNDUR'} {currentRoll?.steps ?? 0} LANGKAH
-              </span>
+          <!-- Highlight Besar Dadu Hasil -->
+          <div class="flex items-center justify-between p-3 rounded-xl border {diceDisplay?.badgeColor}">
+            <div class="flex items-center gap-3">
+              <!-- Big Dice Number Display (+1, +2, -1, -6, +6) -->
+              <div class="w-14 h-14 rounded-xl bg-slate-950/80 border border-white/20 flex flex-col items-center justify-center shadow-inner flex-shrink-0">
+                <span class="text-2xl font-black tracking-tight">{diceDisplay?.signText}</span>
+              </div>
+
+              <div>
+                <div class="text-base font-black tracking-wide flex items-center gap-1.5">
+                  {#if currentRoll?.direction === 'FORWARD'}
+                    <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="18 15 12 9 6 15" />
+                    </svg>
+                  {:else if currentRoll?.direction === 'BACKWARD'}
+                    <svg class="w-4 h-4 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  {/if}
+                  <span>{diceDisplay?.label}</span>
+                </div>
+                <div class="text-xs opacity-90 font-medium">
+                  {diceDisplay?.sub}
+                </div>
+              </div>
+            </div>
+
+            {#if currentRoll?.steps === 6}
+              <div class="text-right">
+                <span class="text-[10px] font-black uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/40">
+                  Bonus Giliran!
+                </span>
+              </div>
             {/if}
           </div>
-
-          <span class="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            Waktu Dijeda
-          </span>
         </div>
 
-        <!-- Special Alert for 6 or -6 -->
-        {#if currentRoll?.steps === 6}
-          <div class="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-semibold flex items-center gap-2">
-            <svg class="w-4 h-4 text-amber-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            <span>Angka 6 / -6: Bidak bisa keluar dari pangkalan atau bergerak di papan. Mendapat giliran lagi!</span>
+        <!-- WAJIB MEMILIH BIDAK UNTUK BERGERAK -->
+        <div class="p-3.5 bg-amber-500/15 border-2 border-amber-400/80 rounded-2xl space-y-2.5 shadow-lg">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="relative flex h-3 w-3">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-400"></span>
+              </span>
+              <span class="text-xs sm:text-sm font-black text-amber-300 uppercase tracking-wide">
+                Wajib Memilih Bidak untuk Bergerak!
+              </span>
+            </div>
+            <span class="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/30">
+              Timer Dijeda
+            </span>
           </div>
-        {/if}
 
-        <div class="text-[11px] text-slate-400 text-center font-medium">
-          Klik salah satu bidak yang berdenyut di papan untuk bergerak.
+          <!-- Tombol Cepat Pemilihan Bidak -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+            {#each validTokenIds as tokId}
+              <button
+                type="button"
+                onclick={() => onSelectToken(tokId)}
+                class="py-2.5 px-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow transition active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                <span>Pilih Bidak {tokId + 1}</span>
+              </button>
+            {/each}
+          </div>
+
+          <p class="text-[11px] text-amber-200/90 text-center font-medium">
+            Bisa klik tombol bidak di atas atau langsung klik bidak yang berdenyut di papan.
+          </p>
         </div>
       </div>
     {/if}
 
   {:else}
     <!-- Opponent Turn View -->
-    <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-1">
+    <div class="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-center">
       <div class="text-xs text-slate-300 font-medium">
         {#if !currentChallenge && gameState !== 'WAITING_FOR_MOVE'}
           Menunggu <strong>{activePlayer?.name ?? 'pemain'}</strong> melempar dadu...
         {:else if currentChallenge && gameState !== 'WAITING_FOR_MOVE'}
           <strong>{activePlayer?.name ?? 'Pemain'}</strong> sedang menghitung di kepalanya...
         {:else if gameState === 'WAITING_FOR_MOVE'}
-          <strong>{activePlayer?.name ?? 'Pemain'}</strong> menghasilkan {currentRoll?.steps ?? 0} langkah ({currentRoll?.direction === 'FORWARD' ? 'Maju' : 'Mundur'}). Sedang memilih bidak...
+          <strong>{activePlayer?.name ?? 'Pemain'}</strong> sedang memilih bidak untuk bergerak...
         {/if}
       </div>
-      {#if currentChallenge}
+
+      {#if gameState === 'WAITING_FOR_MOVE' && diceDisplay}
+        <!-- Dadu Jelas untuk Lawan Juga -->
+        <div class="inline-flex items-center gap-3 px-4 py-2 rounded-xl border {diceDisplay.badgeColor}">
+          <span class="text-xl font-black font-mono">{diceDisplay.signText}</span>
+          <span class="text-xs font-bold">{diceDisplay.label} {diceDisplay.sub}</span>
+        </div>
+      {:else if currentChallenge}
         <div class="text-[11px] text-slate-500 font-mono">
           Angka di layar: ({currentChallenge.screenNumber}) {currentChallenge.op} [ ? ]
         </div>

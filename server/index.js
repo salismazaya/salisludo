@@ -185,7 +185,7 @@ io.on('connection', (socket) => {
         maxPlayers: res.room.maxPlayers
       });
 
-      io.to(code).emit('game_started', {
+      io.to(res.room.code).emit('game_started', {
         players: res.room.players.map(p => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
         tokens: res.room.game.tokens,
         activePlayer: res.room.game.currentTurnPlayer,
@@ -213,7 +213,7 @@ io.on('connection', (socket) => {
       }
 
       const challenge = room.game.spinChallenge(callerId);
-      io.to(code).emit('challenge_ready', {
+      io.to(room.code).emit('challenge_ready', {
         activePlayerId: activeId,
         currentChallenge: challenge
       });
@@ -244,7 +244,7 @@ io.on('connection', (socket) => {
       let challenge = room.game.currentChallenge;
       if (!challenge) {
         challenge = room.game.spinChallenge(callerId);
-        io.to(code).emit('challenge_ready', {
+        io.to(room.code).emit('challenge_ready', {
           activePlayerId: activeId,
           currentChallenge: challenge
         });
@@ -267,12 +267,12 @@ io.on('connection', (socket) => {
       const rollMeta = room.game.applyRoll(roll);
 
       recordRollLog(db, {
-        roomCode: code,
+        roomCode: room.code,
         playerName: room.game.currentTurnPlayer.name,
         ...roll
       });
 
-      io.to(code).emit('dice_rolled', {
+      io.to(room.code).emit('dice_rolled', {
         roll,
         validTokenIds: rollMeta.validTokenIds,
         autoSkip: rollMeta.autoSkip,
@@ -280,11 +280,14 @@ io.on('connection', (socket) => {
       });
 
       // Notify clients timer is paused for pawn selection
-      io.to(code).emit('timer_tick', {
+      io.to(room.code).emit('timer_tick', {
         timeLeft: null,
         totalTimer: room.game.currentTurnTimer,
         activePlayerId: activeId,
         currentChallenge: challenge,
+        gameState: room.game.state,
+        tokens: room.game.tokens,
+        validTokenIds: rollMeta.validTokenIds,
         isPaused: true
       });
 
@@ -292,7 +295,7 @@ io.on('connection', (socket) => {
         setTimeout(() => {
           room.game.nextTurn();
           room.timeLeft = room.game.currentTurnTimer;
-          io.to(code).emit('turn_passed', {
+          io.to(room.code).emit('turn_passed', {
             nextPlayer: room.game.currentTurnPlayer,
             currentTimer: room.game.currentTurnTimer,
             currentChallenge: null
@@ -325,7 +328,7 @@ io.on('connection', (socket) => {
         recordMatchWin(db, code, room.game.currentTurnPlayer.name);
       }
 
-      io.to(code).emit('token_moved', {
+      io.to(room.code).emit('token_moved', {
         playerId: callerId,
         tokenId,
         tokens: room.game.tokens,
