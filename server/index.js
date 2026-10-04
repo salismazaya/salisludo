@@ -164,7 +164,7 @@ io.on('connection', (socket) => {
       socket.data.sessionId = safeSessionId;
 
       const dbPlayer = getOrCreatePlayer(db, name);
-      const safeTimer = Math.min(5, Math.max(3, Number(timer) || 5));
+      const safeTimer = Math.min(30, Math.max(10, Number(timer) || 30));
       const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers });
       const joinRes = roomManager.joinRoom({
         code: room.code,

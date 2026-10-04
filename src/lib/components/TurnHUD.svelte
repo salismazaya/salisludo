@@ -4,8 +4,8 @@
   let {
     activePlayer = null,
     myPlayerId = '',
-    timeLeft = 5,
-    totalTimer = 5,
+    timeLeft = 30,
+    totalTimer = 30,
     gameState = 'WAITING_FOR_ROLL',
     validTokenIds = [],
     currentChallenge = null,
@@ -134,7 +134,7 @@
       <!-- STEP 1: Tombol Roll Dadu Dulu (Timer belum berjalan) -->
       <div class="p-4 bg-[#F8FAFC] border-2 border-black shadow-[3px_3px_0px_#000] text-center space-y-3">
         <p class="text-xs sm:text-sm text-black font-bold">
-          Sekarang giliranmu! Timer belum berjalan. Silakan lempar dadu untuk memulai kalkulasi (Maks 5 detik).
+          Sekarang giliranmu! Timer belum berjalan. Silakan lempar dadu untuk memulai kalkulasi.
         </p>
         <button
           type="button"
@@ -214,7 +214,7 @@
         </div>
 
         <p class="text-[11px] text-slate-600 text-center font-bold">
-          Tip: Jika kehabisan waktu (5 detik), angka random otomatis dipilihkan oleh sistem.
+          Tip: Jika kehabisan waktu, angka random otomatis dipilihkan oleh sistem.
         </p>
       </div>
 

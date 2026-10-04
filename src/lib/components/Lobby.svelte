@@ -2,10 +2,25 @@
   let {
     onJoin = () => {},
     onCreate = () => {},
+    onCreateRoom = null,
+    onJoinRoom = null,
     room = null,
+    player = null,
     onStartGame = () => {},
+    onLeaveRoom = () => {},
+    onShowLeaderboard = () => {},
     myPlayerId = ''
   } = $props();
+
+  function triggerCreate(payload, cb) {
+    const fn = onCreateRoom || onCreate;
+    fn(payload, cb);
+  }
+
+  function triggerJoin(payload, cb) {
+    const fn = onJoinRoom || onJoin;
+    fn(payload, cb);
+  }
 
   let playerName = $state(
     typeof window !== 'undefined' ? localStorage.getItem('ludo_player_name') || '' : ''
@@ -13,7 +28,7 @@
 
   let mode = $state('HOME'); // 'HOME' | 'CREATE' | 'JOIN'
   let joinCode = $state('');
-  let selectedTimer = $state(5);
+  let selectedTimer = $state(30);
   let selectedMaxPlayers = $state(4);
   let errorMessage = $state('');
   let copied = $state(false);
@@ -27,10 +42,12 @@
       localStorage.setItem('ludo_player_name', playerName.trim());
     }
     errorMessage = '';
-    onCreate({
+    triggerCreate({
       name: playerName.trim(),
       timer: selectedTimer,
       maxPlayers: selectedMaxPlayers
+    }, (err) => {
+      if (err) errorMessage = err;
     });
   }
 
@@ -47,9 +64,11 @@
       localStorage.setItem('ludo_player_name', playerName.trim());
     }
     errorMessage = '';
-    onJoin({
+    triggerJoin({
       name: playerName.trim(),
       code: joinCode.trim().toUpperCase()
+    }, (err) => {
+      if (err) errorMessage = err;
     });
   }
 
@@ -63,7 +82,7 @@
     }
   }
 
-  const isHost = $derived(room?.players?.[0]?.id === myPlayerId);
+  const isHost = $derived(room?.players?.[0]?.id === (myPlayerId || player?.id));
   const canStart = $derived(isHost && room?.players?.length >= 2);
 </script>
 
@@ -147,10 +166,10 @@
         <div class="space-y-4 pt-2 border-t-2 border-black">
           <div>
             <span class="block text-xs font-black uppercase tracking-wider mb-2 text-black">
-              Batas Waktu per Giliran (Maks 5 Detik)
+              Batas Waktu per Giliran (Maksimal 30 Detik)
             </span>
             <div class="grid grid-cols-3 gap-2">
-              {#each [3, 4, 5] as sec}
+              {#each [10, 20, 30] as sec}
                 <button
                   type="button"
                   onclick={() => (selectedTimer = sec)}

@@ -18,8 +18,8 @@
   // Active game states
   let tokens = $state({});
   let activePlayer = $state(null);
-  let totalTimer = $state(5);
-  let timeLeft = $state(5);
+  let totalTimer = $state(30);
+  let timeLeft = $state(30);
   let gameState = $state('WAITING_FOR_ROLL');
   let currentChallenge = $state(null);
   let currentRoll = $state(null);
@@ -252,7 +252,7 @@
   <title>SalisLudo - Neobrutalism Math Game</title>
 </svelte:head>
 
-<main class="min-h-screen bg-[#FEF08A] text-black flex flex-col justify-between p-3 sm:p-6 font-sans">
+<main class="min-h-screen bg-white text-black flex flex-col justify-between p-3 sm:p-6 font-sans">
   <!-- Navigation Header Neobrutalist -->
   <header class="max-w-5xl w-full mx-auto flex items-center justify-between p-3 bg-white border-4 border-black shadow-[5px_5px_0px_#000] mb-5">
     <div class="flex items-center gap-2.5">
