@@ -1,6 +1,5 @@
 import { LudoGame } from './LudoEngine.js';
-import { rollMathDice } from './MathDice.js';
-import { PLAYER_COLORS } from './Board6.js';
+import { PLAYER_COLORS } from './Board.js';
 
 export function toPublicRoom(room) {
   if (!room) return null;
@@ -28,17 +27,17 @@ export class RoomManager {
     this.timerIntervals = new Map();
   }
 
-  createRoom({ hostName, defaultTimer = 10, maxPlayers = 6 }) {
+  createRoom({ hostName, defaultTimer = 10, maxPlayers = 4 }) {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     const room = {
       code,
       hostName,
-      defaultTimer: Number(defaultTimer),
-      maxPlayers: Math.min(6, Math.max(2, Number(maxPlayers))),
+      defaultTimer: Number(defaultTimer) || 10,
+      maxPlayers: Math.min(4, Math.max(2, Number(maxPlayers) || 4)),
       status: 'LOBBY', // 'LOBBY' | 'PLAYING' | 'FINISHED'
       players: [],
       game: null,
-      timeLeft: Number(defaultTimer),
+      timeLeft: Number(defaultTimer) || 10,
       createdAt: Date.now()
     };
     this.rooms.set(code, room);
@@ -61,9 +60,9 @@ export class RoomManager {
       existingPlayer.socketId = socketId;
       existingPlayer.id = playerId; // sync sessionId
       existingPlayer.connected = true;
-      existingPlayer.name = trimmedName; // update display name if adjusted
+      existingPlayer.name = trimmedName;
 
-      // If there was a pending room cleanup, cancel it because player came back!
+      // Cancel pending room cleanup if scheduled
       if (this.cleanupTimeouts.has(cleanCode)) {
         clearTimeout(this.cleanupTimeouts.get(cleanCode));
         this.cleanupTimeouts.delete(cleanCode);
@@ -77,7 +76,7 @@ export class RoomManager {
       return { error: 'Permainan di kamar ini sudah berlangsung.' };
     }
 
-    // 3. Check capacity
+    // 3. Check capacity (max 4 players)
     if (room.players.length >= room.maxPlayers) {
       return { error: `Kamar sudah penuh (maksimal ${room.maxPlayers} pemain).` };
     }

@@ -1,5 +1,5 @@
 <script>
-  import { COLOR_CONFIG } from '../../../server/game/Board6.js';
+  import { COLOR_CONFIG } from '../../../server/game/Board.js';
 
   let {
     activePlayer = null,
@@ -35,9 +35,12 @@
       </div>
     </div>
 
-    <!-- Timer Countdown Badge -->
+    <!-- Timer Countdown Badge with SVG icon -->
     <div class="flex items-center gap-1.5 bg-slate-950 px-3 py-1 rounded-xl border border-slate-800 flex-shrink-0">
-      <span class="text-xs">⏱️</span>
+      <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
       <span class="font-mono font-bold text-sm {timeLeft <= 3 ? 'text-rose-400 animate-pulse' : 'text-slate-200'}">
         {timeLeft}s
       </span>
@@ -57,13 +60,20 @@
     {#if gameState === 'WAITING_FOR_ROLL'}
       <button
         onclick={onRoll}
-        class="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black text-sm uppercase tracking-wider rounded-xl shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2"
+        class="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm uppercase tracking-wider rounded-xl shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2"
       >
-        <span>🎲</span>
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="4" />
+          <path d="M8 8h.01" />
+          <path d="M12 12h.01" />
+          <path d="M16 16h.01" />
+          <path d="M16 8h.01" />
+          <path d="M8 16h.01" />
+        </svg>
         <span>Lempar Dadu Matematika</span>
       </button>
     {:else if gameState === 'WAITING_FOR_MOVE'}
-      <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center text-xs text-amber-300 font-semibold animate-pulse">
+      <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center text-xs text-amber-300 font-semibold">
         Pilih salah satu bidak yang berdenyut di papan untuk bergerak!
       </div>
     {/if}

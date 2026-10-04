@@ -22,7 +22,7 @@ export function createDb(dbPath = 'ludo.db') {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       room_code TEXT UNIQUE NOT NULL,
       default_timer INTEGER NOT NULL DEFAULT 10,
-      max_players INTEGER NOT NULL DEFAULT 6,
+      max_players INTEGER NOT NULL DEFAULT 4,
       status TEXT NOT NULL DEFAULT 'LOBBY',
       winner_name TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

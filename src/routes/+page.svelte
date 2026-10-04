@@ -265,18 +265,35 @@
   <!-- Navigation Header -->
   <header class="max-w-5xl w-full mx-auto flex items-center justify-between py-2 border-b border-slate-800 mb-4">
     <div class="flex items-center gap-2">
-      <span class="text-2xl">🎲</span>
+      <div class="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="4" />
+          <path d="M8 8h.01" />
+          <path d="M12 12h.01" />
+          <path d="M16 16h.01" />
+          <path d="M16 8h.01" />
+          <path d="M8 16h.01" />
+        </svg>
+      </div>
       <span class="font-extrabold text-base sm:text-lg tracking-tight text-white">
         Ludo Dadu Matematika
       </span>
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2 sm:gap-3">
       <button
         onclick={openLeaderboard}
-        class="text-xs px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 font-semibold transition"
+        class="text-xs px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 font-semibold transition flex items-center gap-1.5"
       >
-        🏆 Peringkat
+        <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+          <path d="M4 22h16" />
+          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+        </svg>
+        <span>Peringkat</span>
       </button>
 
       <button
@@ -285,7 +302,19 @@
         title={soundEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
         aria-label={soundEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
       >
-        {soundEnabled ? '🔊' : '🔇'}
+        {#if soundEnabled}
+          <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+          </svg>
+        {:else}
+          <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <line x1="23" y1="9" x2="17" y2="15" />
+            <line x1="17" y1="9" x2="23" y2="15" />
+          </svg>
+        {/if}
       </button>
 
       {#if gameView !== 'LOBBY'}
@@ -303,7 +332,11 @@
   <div class="flex-1 flex flex-col items-center justify-center w-full max-w-5xl mx-auto space-y-4">
     {#if isRestoringSession}
       <div class="p-8 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-3xl space-y-3 shadow-xl">
-        <div class="text-3xl animate-spin inline-block">🎲</div>
+        <div class="w-8 h-8 mx-auto animate-spin text-indigo-400">
+          <svg class="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          </svg>
+        </div>
         <p class="font-bold text-white text-base">Menghubungkan kembali ke kamar...</p>
         <p class="text-xs text-slate-500">Memulihkan sesi permainanmu</p>
       </div>
@@ -330,7 +363,7 @@
         onRoll={handleRollDice}
       />
 
-      <!-- Scalable SVG Board -->
+      <!-- Scalable SVG Board (15x15 Classic Grid) -->
       <BoardSvg
         players={currentRoom?.players ?? []}
         {tokens}
@@ -349,7 +382,16 @@
     {:else if gameView === 'FINISHED'}
       <!-- Game Over / Winner Screen -->
       <div class="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
-        <div class="text-5xl animate-bounce">🏆</div>
+        <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+          <svg class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+            <path d="M4 22h16" />
+            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+          </svg>
+        </div>
         <h2 class="text-2xl font-black text-white">Permainan Selesai!</h2>
         <p class="text-sm text-slate-400">
           Selamat kepada para pemenang yang berhasil memasukkan seluruh bidaknya ke zona finish!

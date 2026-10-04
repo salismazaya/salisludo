@@ -1,10 +1,10 @@
-import { computeTokenTargetPosition, isSafeSquare, getStartSquare } from './Board6.js';
+import { computeTokenTargetPosition, isSafeSquare } from './Board.js';
 
 export class LudoGame {
   constructor({ id, defaultTimer = 10, players }) {
     this.id = id;
-    this.defaultTimer = defaultTimer;
-    this.currentTurnTimer = defaultTimer;
+    this.defaultTimer = Number(defaultTimer) || 10;
+    this.currentTurnTimer = this.defaultTimer;
     this.players = players; // array of { id, name, color }
     this.currentTurnIndex = 0;
     this.consecutiveSixes = 0;
@@ -29,31 +29,55 @@ export class LudoGame {
 
   applyRoll(rollResult) {
     this.pendingRoll = rollResult;
-    this.state = 'WAITING_FOR_MOVE';
 
-    // Check valid moves
+    // Rule: Check for 3 consecutive sixes penalty
+    if (rollResult.extraTurn && rollResult.steps === 6) {
+      this.consecutiveSixes += 1;
+      if (this.consecutiveSixes >= 3) {
+        // Penalty: Turn passes immediately to next player
+        this.nextTurn();
+        return {
+          autoSkip: true,
+          validTokenIds: [],
+          penalty: 'THREE_CONSECUTIVE_SIXES'
+        };
+      }
+    } else {
+      this.consecutiveSixes = 0;
+    }
+
+    // Check valid moves for current player
     const validTokenIds = this.getValidMoves(this.currentTurnPlayer.id);
+
     if (validTokenIds.length === 0) {
-      // Auto pass turn
+      this.state = 'WAITING_FOR_ROLL';
       return { autoSkip: true, validTokenIds: [] };
     }
+
+    this.state = 'WAITING_FOR_MOVE';
     return { autoSkip: false, validTokenIds };
   }
 
   getValidMoves(playerId) {
     if (!this.pendingRoll) return [];
     const player = this.players.find(p => p.id === playerId);
-    const tokens = this.tokens[playerId];
+    if (!player) return [];
+    const tokens = this.tokens[playerId] || [];
     const valid = [];
 
     tokens.forEach(tok => {
+      // Tokens already finished in HOME cannot move
+      if (tok.type === 'HOME') return;
+
       const target = computeTokenTargetPosition({
         color: player.color,
         currentPos: tok,
         steps: this.pendingRoll.steps,
         direction: this.pendingRoll.direction
       });
-      if (target) valid.push(tok.id);
+      if (target) {
+        valid.push(tok.id);
+      }
     });
 
     return valid;
@@ -65,7 +89,9 @@ export class LudoGame {
     }
 
     const player = this.players.find(p => p.id === playerId);
-    const token = this.tokens[playerId][tokenId];
+    const token = this.tokens[playerId]?.[tokenId];
+    if (!token) return { success: false, reason: 'TOKEN_NOT_FOUND' };
+
     const target = computeTokenTargetPosition({
       color: player.color,
       currentPos: token,
@@ -75,52 +101,62 @@ export class LudoGame {
 
     if (!target) return { success: false, reason: 'INVALID_MOVE' };
 
-    // Move token
+    const wasHome = target.type === 'HOME';
+
+    // Move token to target
     token.type = target.type;
     token.index = target.index;
 
     let captured = null;
-    // Check capture on TRACK if target not safe
+    // Check capture on TRACK if target not a safe square
     if (target.type === 'TRACK' && !isSafeSquare(target.index)) {
       for (const p of this.players) {
         if (p.id === playerId) continue;
         for (const oppTok of this.tokens[p.id]) {
           if (oppTok.type === 'TRACK' && oppTok.index === target.index) {
             oppTok.type = 'YARD';
-            captured = { playerId: p.id, tokenId: oppTok.id };
+            oppTok.index = oppTok.id;
+            captured = { playerId: p.id, tokenId: oppTok.id, playerName: p.name };
             break;
           }
         }
+        if (captured) break;
       }
     }
 
-    // Win check for this player
+    // Check if player won (all 4 tokens home)
     const finishedTokens = this.tokens[playerId].filter(t => t.type === 'HOME').length;
     if (finishedTokens === 4 && !this.winners.includes(playerId)) {
       this.winners.push(playerId);
-      if (this.winners.length === this.players.length - 1) {
+      if (this.winners.length >= this.players.length - 1) {
         this.state = 'FINISHED';
-        return { success: true, finished: true, winners: this.winners };
+        return {
+          success: true,
+          finished: true,
+          winners: this.winners,
+          captured
+        };
       }
     }
 
-    // Extra turn condition (rolled 6 or captured piece)
-    const getsBonus = (this.pendingRoll.extraTurn || captured !== null) && this.consecutiveSixes < 2;
+    // Extra turn condition:
+    // 1) Rolled positive 6
+    // 2) Captured an opponent's piece
+    // 3) Successfully reached HOME
+    const getsBonus = this.pendingRoll.extraTurn || captured !== null || wasHome;
 
-    if (this.pendingRoll.extraTurn) {
-      this.consecutiveSixes += 1;
-      this.currentTurnTimer = Math.max(2, Math.floor(this.currentTurnTimer / 2));
-    } else {
-      this.consecutiveSixes = 0;
-      this.currentTurnTimer = this.defaultTimer;
-    }
-
-    this.pendingRoll = null;
-
-    if (!getsBonus) {
-      this.nextTurn();
-    } else {
+    if (getsBonus) {
+      if (this.pendingRoll.extraTurn) {
+        // Roll 6: timer is halved (minimum 2s)
+        this.currentTurnTimer = Math.max(2, Math.floor(this.currentTurnTimer / 2));
+      } else {
+        // Capture / Home bonus: full timer reset
+        this.currentTurnTimer = this.defaultTimer;
+      }
+      this.pendingRoll = null;
       this.state = 'WAITING_FOR_ROLL';
+    } else {
+      this.nextTurn();
     }
 
     return {
@@ -128,7 +164,9 @@ export class LudoGame {
       captured,
       extraTurn: getsBonus,
       nextPlayer: this.currentTurnPlayer,
-      currentTimer: this.currentTurnTimer
+      currentTimer: this.currentTurnTimer,
+      finished: false,
+      winners: this.winners
     };
   }
 
@@ -138,10 +176,12 @@ export class LudoGame {
     this.pendingRoll = null;
     this.state = 'WAITING_FOR_ROLL';
 
+    if (this.winners.length >= this.players.length) return;
+
     let count = 0;
     do {
       this.currentTurnIndex = (this.currentTurnIndex + 1) % this.players.length;
       count++;
-    } while (this.winners.includes(this.currentTurnPlayer.id) && count < this.players.length);
+    } while (this.winners.includes(this.currentTurnPlayer?.id) && count < this.players.length);
   }
 }

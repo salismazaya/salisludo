@@ -1,5 +1,5 @@
 <script>
-  import { COLOR_CONFIG } from '../../../server/game/Board6.js';
+  import { COLOR_CONFIG } from '../../../server/game/Board.js';
 
   let {
     playerName = $bindable(''),
@@ -15,7 +15,7 @@
   let mode = $state('HOME'); // 'HOME' | 'CREATE' | 'JOIN'
   let joinCode = $state('');
   let selectedTimer = $state(10);
-  let selectedMaxPlayers = $state(6);
+  let selectedMaxPlayers = $state(4);
   let errorMessage = $state('');
   let copied = $state(false);
   let isSubmitting = $state(false);
@@ -76,14 +76,22 @@
   {#if !room}
     <!-- Title & Brand -->
     <div class="text-center space-y-2">
-      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 text-3xl mb-2 border border-indigo-500/30">
-        🎲
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600/20 text-indigo-400 mb-2 border border-indigo-500/30">
+        <!-- Clean Dice SVG Icon -->
+        <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="18" height="18" x="3" y="3" rx="4" />
+          <path d="M8 8h.01" />
+          <path d="M12 12h.01" />
+          <path d="M16 16h.01" />
+          <path d="M16 8h.01" />
+          <path d="M8 16h.01" />
+        </svg>
       </div>
       <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white">
         Ludo Dadu Matematika
       </h1>
       <p class="text-sm text-slate-400">
-        Multiplayer 6 pemain dengan dadu persamaan matematika dan safe zone.
+        Multiplayer 2 sampai 4 pemain dengan dadu persamaan matematika dan safe zone.
       </p>
     </div>
 
@@ -121,14 +129,20 @@
           onclick={() => { errorMessage = ''; mode = 'CREATE'; }}
           class="py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2"
         >
-          <span>➕</span>
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
           <span>Buat Kamar</span>
         </button>
         <button
           onclick={() => { errorMessage = ''; mode = 'JOIN'; }}
           class="py-3.5 px-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-200 font-bold rounded-xl border border-slate-700 shadow-lg transition flex items-center justify-center gap-2"
         >
-          <span>🔑</span>
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m21 2-2 2m-6 6 2-2m-8 8 2-2m2 2 4-4m-4 4-2-2m2 2-4-4" />
+            <circle cx="7.5" cy="15.5" r="4.5" />
+          </svg>
           <span>Gabung Kamar</span>
         </button>
       </div>
@@ -142,7 +156,7 @@
         </button>
       </div>
     {:else if mode === 'CREATE'}
-      <!-- Custom Timer & Max Players -->
+      <!-- Custom Timer & Max Players (2..4) -->
       <div class="space-y-4 pt-2 border-t border-slate-800">
         <div>
           <span class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
@@ -163,16 +177,16 @@
 
         <div>
           <span class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-            Maksimal Pemain (2 sampai 6)
+            Maksimal Pemain (Maksimal 4)
           </span>
-          <div class="grid grid-cols-5 gap-2">
-            {#each [2, 3, 4, 5, 6] as count}
+          <div class="grid grid-cols-3 gap-2">
+            {#each [2, 3, 4] as count}
               <button
                 type="button"
                 onclick={() => (selectedMaxPlayers = count)}
                 class="py-2 rounded-lg font-bold text-sm border transition {selectedMaxPlayers === count ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'}"
               >
-                {count}
+                {count} Pemain
               </button>
             {/each}
           </div>

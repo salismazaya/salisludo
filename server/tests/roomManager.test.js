@@ -42,4 +42,18 @@ describe('RoomManager with Persistent Session', () => {
     expect(rejoin.player.connected).toBe(true);
     expect(room.players).toHaveLength(2); // Still 2 players, not 3!
   });
+
+  it('enforces maximum capacity of 4 players', () => {
+    const mgr = new RoomManager();
+    const room = mgr.createRoom({ hostName: 'P1', defaultTimer: 10, maxPlayers: 4 });
+    mgr.joinRoom({ code: room.code, socketId: 's1', sessionId: 'p1', name: 'P1' });
+    mgr.joinRoom({ code: room.code, socketId: 's2', sessionId: 'p2', name: 'P2' });
+    mgr.joinRoom({ code: room.code, socketId: 's3', sessionId: 'p3', name: 'P3' });
+    mgr.joinRoom({ code: room.code, socketId: 's4', sessionId: 'p4', name: 'P4' });
+
+    // 5th player should be rejected
+    const join5 = mgr.joinRoom({ code: room.code, socketId: 's5', sessionId: 'p5', name: 'P5' });
+    expect(join5.error).toBeDefined();
+    expect(room.players).toHaveLength(4);
+  });
 });

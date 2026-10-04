@@ -1,5 +1,15 @@
 <script>
-  import { PLAYER_COLORS, COLOR_CONFIG, TOTAL_TRACK_CELLS, isSafeSquare, getStartSquare } from '../../../server/game/Board6.js';
+  import {
+    PLAYER_COLORS,
+    COLOR_CONFIG,
+    SAFE_SQUARES,
+    TRACK_GRID_COORDS,
+    HOME_COLUMN_GRID_COORDS,
+    YARD_PIXEL_COORDS,
+    HOME_PIXEL_COORDS,
+    getTrackPixelCoords,
+    getHomeColumnPixelCoords
+  } from '../../../server/game/Board.js';
 
   let {
     players = [],
@@ -9,203 +19,380 @@
     onTokenClick = () => {}
   } = $props();
 
-  const CX = 500;
-  const CY = 500;
-  const TRACK_RADIUS = 350;
-  const YARD_RADIUS = 435;
-  const HOME_START_RADIUS = 285;
-  const HOME_END_RADIUS = 105;
+  // Helper to map a token's logical position to pixel coordinates [x, y]
+  function getTokenCoordinates(playerColor, token, tokenId) {
+    if (!token) return { x: 300, y: 300 };
 
-  // 72 track squares coordinates
-  function getTrackCoords(index) {
-    const angle = ((index * 360) / TOTAL_TRACK_CELLS - 90) * (Math.PI / 180);
-    return {
-      x: CX + TRACK_RADIUS * Math.cos(angle),
-      y: CY + TRACK_RADIUS * Math.sin(angle)
-    };
-  }
-
-  // Home column coordinates (0..5)
-  function getHomeColumnCoords(playerIndex, stepIndex) {
-    const angle = (playerIndex * 60 - 90) * (Math.PI / 180);
-    const radius = HOME_START_RADIUS - stepIndex * ((HOME_START_RADIUS - HOME_END_RADIUS) / 5);
-    return {
-      x: CX + radius * Math.cos(angle),
-      y: CY + radius * Math.sin(angle)
-    };
-  }
-
-  // Yard coordinates for player
-  function getYardSlotCoords(playerIndex, slotIndex) {
-    const angle = (playerIndex * 60 - 90) * (Math.PI / 180);
-    const baseX = CX + YARD_RADIUS * Math.cos(angle);
-    const baseY = CY + YARD_RADIUS * Math.sin(angle);
-    const offsets = [
-      { dx: -18, dy: -18 },
-      { dx: 18, dy: -18 },
-      { dx: -18, dy: 18 },
-      { dx: 18, dy: 18 }
-    ];
-    return {
-      x: baseX + offsets[slotIndex].dx,
-      y: baseY + offsets[slotIndex].dy
-    };
-  }
-
-  // Home Center coordinates
-  function getHomeCenterCoords(playerIndex) {
-    const angle = (playerIndex * 60 - 90) * (Math.PI / 180);
-    return {
-      x: CX + 40 * Math.cos(angle),
-      y: CY + 40 * Math.sin(angle)
-    };
-  }
-
-  function getTokenPosition(player, token) {
-    const pIdx = COLOR_CONFIG[player.color]?.index ?? 0;
     if (token.type === 'YARD') {
-      return getYardSlotCoords(pIdx, token.index);
+      const yardList = YARD_PIXEL_COORDS[playerColor] || YARD_PIXEL_COORDS.red;
+      return yardList[tokenId] || yardList[0];
     }
+
     if (token.type === 'TRACK') {
-      return getTrackCoords(token.index);
+      return getTrackPixelCoords(token.index);
     }
+
     if (token.type === 'HOME_COLUMN') {
-      return getHomeColumnCoords(pIdx, token.index);
+      return getHomeColumnPixelCoords(playerColor, token.index);
     }
+
     if (token.type === 'HOME') {
-      return getHomeCenterCoords(pIdx);
+      return HOME_PIXEL_COORDS[playerColor] || { x: 300, y: 300 };
     }
-    return { x: CX, y: CY };
+
+    return { x: 300, y: 300 };
   }
+
+  // Group tokens that share the same square so we can offset them visually
+  const allRenderedTokens = $derived.by(() => {
+    const list = [];
+    players.forEach(p => {
+      const playerTokens = tokens[p.id] || [];
+      playerTokens.forEach(t => {
+        const baseCoords = getTokenCoordinates(p.color, t, t.id);
+        const isEligible = activePlayerId === p.id && validTokenIds.includes(t.id);
+        list.push({
+          playerId: p.id,
+          playerName: p.name,
+          color: p.color,
+          token: t,
+          baseCoords,
+          isEligible,
+          // key for stacking
+          coordKey: `${t.type}_${t.index}_${t.type === 'YARD' ? t.id : ''}_${t.type === 'HOME' ? p.color : ''}`
+        });
+      });
+    });
+
+    // Compute stacking offset
+    const grouped = {};
+    list.forEach(item => {
+      if (!grouped[item.coordKey]) grouped[item.coordKey] = [];
+      grouped[item.coordKey].push(item);
+    });
+
+    list.forEach(item => {
+      const group = grouped[item.coordKey];
+      if (group.length > 1 && item.token.type !== 'YARD') {
+        const idx = group.indexOf(item);
+        const total = group.length;
+        // Radial or small diagonal offset
+        const angle = (idx / total) * Math.PI * 2;
+        const radius = Math.min(12, 5 + total * 2);
+        item.renderX = item.baseCoords.x + Math.cos(angle) * radius;
+        item.renderY = item.baseCoords.y + Math.sin(angle) * radius;
+      } else {
+        item.renderX = item.baseCoords.x;
+        item.renderY = item.baseCoords.y;
+      }
+    });
+
+    return list;
+  });
+
+  // Track cell data for rendering
+  const trackCellsList = $derived.by(() => {
+    const cells = [];
+    for (let i = 0; i < 52; i++) {
+      const [col, row] = TRACK_GRID_COORDS[i];
+      const isSafe = SAFE_SQUARES.includes(i);
+      let specialType = null; // 'START_RED', 'START_GREEN', 'START_YELLOW', 'START_BLUE', 'SAFE_STAR'
+      if (i === 0) specialType = 'START_RED';
+      else if (i === 13) specialType = 'START_GREEN';
+      else if (i === 26) specialType = 'START_YELLOW';
+      else if (i === 39) specialType = 'START_BLUE';
+      else if (isSafe) specialType = 'SAFE_STAR';
+
+      cells.push({
+        index: i,
+        col,
+        row,
+        x: col * 40,
+        y: row * 40,
+        isSafe,
+        specialType
+      });
+    }
+    return cells;
+  });
 </script>
 
-<div class="relative w-full max-w-[700px] aspect-square mx-auto select-none">
-  <svg viewBox="0 0 1000 1000" class="w-full h-full drop-shadow-2xl">
-    <!-- Board Base Background -->
-    <circle cx={CX} cy={CY} r="485" fill="#1e293b" stroke="#334155" stroke-width="8" />
+<div class="w-full max-w-[580px] aspect-square mx-auto p-2 bg-slate-900/90 rounded-3xl border border-slate-800 shadow-2xl flex items-center justify-center">
+  <svg
+    viewBox="0 0 600 600"
+    class="w-full h-full select-none rounded-2xl overflow-hidden shadow-inner bg-slate-950"
+  >
+    <defs>
+      <!-- Gradients for 3D Pawn Tokens -->
+      <radialGradient id="token-red" cx="35%" cy="30%" r="70%">
+        <stop offset="0%" stop-color="#f87171" />
+        <stop offset="50%" stop-color="#ef4444" />
+        <stop offset="100%" stop-color="#991b1b" />
+      </radialGradient>
+      <radialGradient id="token-green" cx="35%" cy="30%" r="70%">
+        <stop offset="0%" stop-color="#4ade80" />
+        <stop offset="50%" stop-color="#10b981" />
+        <stop offset="100%" stop-color="#065f46" />
+      </radialGradient>
+      <radialGradient id="token-yellow" cx="35%" cy="30%" r="70%">
+        <stop offset="0%" stop-color="#fde047" />
+        <stop offset="50%" stop-color="#f59e0b" />
+        <stop offset="100%" stop-color="#92400e" />
+      </radialGradient>
+      <radialGradient id="token-blue" cx="35%" cy="30%" r="70%">
+        <stop offset="0%" stop-color="#60a5fa" />
+        <stop offset="50%" stop-color="#3b82f6" />
+        <stop offset="100%" stop-color="#1e3a8a" />
+      </radialGradient>
 
-    <!-- Center Trophy Destination Area -->
-    <circle cx={CX} cy={CY} r="85" fill="#0f172a" stroke="#475569" stroke-width="4" />
-    <text x={CX} y={CY + 10} text-anchor="middle" font-size="32" fill="#fbbf24">🏆</text>
+      <!-- Token Drop Shadow -->
+      <filter id="pawn-shadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.6" />
+      </filter>
 
-    <!-- 6 Player Arms / Wedges in Center -->
-    {#each PLAYER_COLORS as color, idx}
-      {@const angle1 = ((idx * 60 - 120) * Math.PI) / 180}
-      {@const angle2 = ((idx * 60 - 60) * Math.PI) / 180}
-      {@const x1 = CX + 85 * Math.cos(angle1)}
-      {@const y1 = CY + 85 * Math.sin(angle1)}
-      {@const x2 = CX + 85 * Math.cos(angle2)}
-      {@const y2 = CY + 85 * Math.sin(angle2)}
-      <path
-        d={`M ${CX} ${CY} L ${x1} ${y1} A 85 85 0 0 1 ${x2} ${y2} Z`}
-        fill={COLOR_CONFIG[color].hex}
-        opacity="0.25"
-      />
-    {/each}
+      <!-- Glow for Active Token -->
+      <filter id="active-glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#ffffff" flood-opacity="0.9" />
+      </filter>
+    </defs>
 
-    <!-- 72 Perimeter Track Squares -->
-    {#each Array(TOTAL_TRACK_CELLS) as _, i}
-      {@const coords = getTrackCoords(i)}
-      {@const isSafe = isSafeSquare(i)}
-      {@const playerStartIndex = PLAYER_COLORS.findIndex(c => getStartSquare(c) === i)}
-      {@const startColor = playerStartIndex !== -1 ? COLOR_CONFIG[PLAYER_COLORS[playerStartIndex]].hex : null}
+    <!-- 1. BOARD BACKGROUND GRID -->
+    <rect x="0" y="0" width="600" height="600" fill="#f8fafc" />
 
-      <g transform={`translate(${coords.x}, ${coords.y})`}>
+    <!-- 2. FOUR CORNER YARDS (BASES) -->
+    <!-- Green Yard (Top-Left: 6x6 cells) -->
+    <g>
+      <rect x="0" y="0" width="240" height="240" fill="#10B981" />
+      <rect x="30" y="30" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
+      {#each YARD_PIXEL_COORDS.green as pt, i}
+        <circle cx={pt.x} cy={pt.y} r="22" fill="#d1fae5" stroke="#10b981" stroke-width="3" />
+        <circle cx={pt.x} cy={pt.y} r="8" fill="#a7f3d0" />
+      {/each}
+      <text x="120" y="25" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
+        HIJAU
+      </text>
+    </g>
+
+    <!-- Yellow Yard (Top-Right: 6x6 cells) -->
+    <g>
+      <rect x="360" y="0" width="240" height="240" fill="#F59E0B" />
+      <rect x="390" y="30" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
+      {#each YARD_PIXEL_COORDS.yellow as pt, i}
+        <circle cx={pt.x} cy={pt.y} r="22" fill="#fef3c7" stroke="#f59e0b" stroke-width="3" />
+        <circle cx={pt.x} cy={pt.y} r="8" fill="#fde68a" />
+      {/each}
+      <text x="480" y="25" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
+        KUNING
+      </text>
+    </g>
+
+    <!-- Red Yard (Bottom-Left: 6x6 cells) -->
+    <g>
+      <rect x="0" y="360" width="240" height="240" fill="#EF4444" />
+      <rect x="30" y="390" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
+      {#each YARD_PIXEL_COORDS.red as pt, i}
+        <circle cx={pt.x} cy={pt.y} r="22" fill="#fee2e2" stroke="#ef4444" stroke-width="3" />
+        <circle cx={pt.x} cy={pt.y} r="8" fill="#fecaca" />
+      {/each}
+      <text x="120" y="385" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
+        MERAH
+      </text>
+    </g>
+
+    <!-- Blue Yard (Bottom-Right: 6x6 cells) -->
+    <g>
+      <rect x="360" y="360" width="240" height="240" fill="#3B82F6" />
+      <rect x="390" y="390" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
+      {#each YARD_PIXEL_COORDS.blue as pt, i}
+        <circle cx={pt.x} cy={pt.y} r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="3" />
+        <circle cx={pt.x} cy={pt.y} r="8" fill="#bfdbfe" />
+      {/each}
+      <text x="480" y="385" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
+        BIRU
+      </text>
+    </g>
+
+    <!-- 3. TRACK CELLS (52 Cells) -->
+    <g id="track-cells">
+      {#each trackCellsList as cell}
+        {@const isStartRed = cell.specialType === 'START_RED'}
+        {@const isStartGreen = cell.specialType === 'START_GREEN'}
+        {@const isStartYellow = cell.specialType === 'START_YELLOW'}
+        {@const isStartBlue = cell.specialType === 'START_BLUE'}
+        {@const isSafeStar = cell.specialType === 'SAFE_STAR'}
+
+        <!-- Cell Base -->
         <rect
-          x="-14"
-          y="-14"
-          width="28"
-          height="28"
-          rx="6"
-          fill={startColor ? startColor : isSafe ? '#475569' : '#1e293b'}
-          stroke={isSafe ? '#fbbf24' : '#334155'}
-          stroke-width={isSafe ? 2.5 : 1.5}
+          x={cell.x}
+          y={cell.y}
+          width="40"
+          height="40"
+          fill={isStartRed
+            ? '#ef4444'
+            : isStartGreen
+            ? '#10b981'
+            : isStartYellow
+            ? '#f59e0b'
+            : isStartBlue
+            ? '#3b82f6'
+            : isSafeStar
+            ? '#f1f5f9'
+            : '#ffffff'}
+          stroke="#cbd5e1"
+          stroke-width="1"
         />
-        {#if isSafe}
-          <text x="0" y="4" text-anchor="middle" font-size="12" fill="#fbbf24" font-weight="bold">★</text>
-        {:else}
-          <text x="0" y="3" text-anchor="middle" font-size="8" fill="#64748b">{i}</text>
+
+        <!-- Start Square Arrow Markers -->
+        {#if isStartRed}
+          <!-- Arrow pointing UP -->
+          <polygon
+            points="{cell.x + 20},{cell.y + 8} {cell.x + 10},{cell.y + 24} {cell.x + 16},{cell.y + 24} {cell.x + 16},{cell.y + 32} {cell.x + 24},{cell.y + 32} {cell.x + 24},{cell.y + 24} {cell.x + 30},{cell.y + 24}"
+            fill="#ffffff"
+          />
+        {:else if isStartGreen}
+          <!-- Arrow pointing RIGHT -->
+          <polygon
+            points="{cell.x + 32},{cell.y + 20} {cell.x + 16},{cell.y + 10} {cell.x + 16},{cell.y + 16} {cell.x + 8},{cell.y + 16} {cell.x + 8},{cell.y + 24} {cell.x + 16},{cell.y + 24} {cell.x + 16},{cell.y + 30}"
+            fill="#ffffff"
+          />
+        {:else if isStartYellow}
+          <!-- Arrow pointing DOWN -->
+          <polygon
+            points="{cell.x + 20},{cell.y + 32} {cell.x + 10},{cell.y + 16} {cell.x + 16},{cell.y + 16} {cell.x + 16},{cell.y + 8} {cell.x + 24},{cell.y + 8} {cell.x + 24},{cell.y + 16} {cell.x + 30},{cell.y + 16}"
+            fill="#ffffff"
+          />
+        {:else if isStartBlue}
+          <!-- Arrow pointing LEFT -->
+          <polygon
+            points="{cell.x + 8},{cell.y + 20} {cell.x + 24},{cell.y + 10} {cell.x + 24},{cell.y + 16} {cell.x + 32},{cell.y + 16} {cell.x + 32},{cell.y + 24} {cell.x + 24},{cell.y + 24} {cell.x + 24},{cell.y + 30}"
+            fill="#ffffff"
+          />
+        {:else if isSafeStar}
+          <!-- Safe Star Icon (★) -->
+          <path
+            d="M {cell.x + 20} {cell.y + 10}
+               L {cell.x + 22.8} {cell.y + 16.5}
+               L {cell.x + 29.5} {cell.y + 17.1}
+               L {cell.x + 24.4} {cell.y + 21.6}
+               L {cell.x + 25.9} {cell.y + 28.2}
+               L {cell.x + 20} {cell.y + 24.8}
+               L {cell.x + 14.1} {cell.y + 28.2}
+               L {cell.x + 15.6} {cell.y + 21.6}
+               L {cell.x + 10.5} {cell.y + 17.1}
+               L {cell.x + 17.2} {cell.y + 16.5} Z"
+            fill="#64748b"
+          />
         {/if}
-      </g>
+      {/each}
+    </g>
+
+    <!-- 4. FOUR HOME RUN COLUMNS (5 cells each) -->
+    <!-- Red Home Column (bottom arm middle col 7, rows 13..9) -->
+    {#each HOME_COLUMN_GRID_COORDS.red as [c, r]}
+      <rect x={c * 40} y={r * 40} width="40" height="40" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />
     {/each}
 
-    <!-- Home Columns for each of the 6 players (6 steps each) -->
-    {#each PLAYER_COLORS as color, pIdx}
-      {#each Array(6) as _, step}
-        {@const coords = getHomeColumnCoords(pIdx, step)}
-        <g transform={`translate(${coords.x}, ${coords.y})`}>
-          <rect
-            x="-13"
-            y="-13"
-            width="26"
-            height="26"
-            rx="5"
-            fill={COLOR_CONFIG[color].hex}
-            opacity="0.85"
+    <!-- Green Home Column (left arm middle row 7, cols 1..5) -->
+    {#each HOME_COLUMN_GRID_COORDS.green as [c, r]}
+      <rect x={c * 40} y={r * 40} width="40" height="40" fill="#10b981" stroke="#ffffff" stroke-width="1.5" />
+    {/each}
+
+    <!-- Yellow Home Column (top arm middle col 7, rows 1..5) -->
+    {#each HOME_COLUMN_GRID_COORDS.yellow as [c, r]}
+      <rect x={c * 40} y={r * 40} width="40" height="40" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5" />
+    {/each}
+
+    <!-- Blue Home Column (right arm middle row 7, cols 13..9) -->
+    {#each HOME_COLUMN_GRID_COORDS.blue as [c, r]}
+      <rect x={c * 40} y={r * 40} width="40" height="40" fill="#3b82f6" stroke="#ffffff" stroke-width="1.5" />
+    {/each}
+
+    <!-- 5. CENTER FINISH ZONE (4 Triangles meeting at 300,300) -->
+    <g id="center-home">
+      <!-- Top Triangle (Yellow) -->
+      <polygon points="240,240 360,240 300,300" fill="#f59e0b" stroke="#ffffff" stroke-width="1" />
+      <!-- Right Triangle (Blue) -->
+      <polygon points="360,240 360,360 300,300" fill="#3b82f6" stroke="#ffffff" stroke-width="1" />
+      <!-- Bottom Triangle (Red) -->
+      <polygon points="360,360 240,360 300,300" fill="#ef4444" stroke="#ffffff" stroke-width="1" />
+      <!-- Left Triangle (Green) -->
+      <polygon points="240,360 240,240 300,300" fill="#10b981" stroke="#ffffff" stroke-width="1" />
+
+      <!-- Center Inner Hub -->
+      <circle cx="300" cy="300" r="18" fill="#ffffff" stroke="#cbd5e1" stroke-width="2" />
+      <circle cx="300" cy="300" r="12" fill="#0f172a" />
+      <!-- Center Star Icon -->
+      <path
+        d="M 300 293
+           L 302 297.5
+           L 307 298
+           L 303.2 301.2
+           L 304.5 306
+           L 300 303.5
+           L 295.5 306
+           L 296.8 301.2
+           L 293 298
+           L 298 297.5 Z"
+        fill="#facc15"
+      />
+    </g>
+
+    <!-- 6. TOKENS LAYER (Realistic Pawns with 3D Gradients & Pulse Rings) -->
+    <g id="tokens-layer">
+      {#each allRenderedTokens as item}
+        {@const gradId = `token-${item.color}`}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <g
+          transform="translate({item.renderX}, {item.renderY})"
+          class="transition-transform duration-300 {item.isEligible ? 'cursor-pointer' : ''}"
+          filter={item.isEligible ? 'url(#active-glow)' : 'url(#pawn-shadow)'}
+          onclick={() => {
+            if (item.isEligible) {
+              onTokenClick(item.token.id);
+            }
+          }}
+        >
+          <!-- Active Pulsing Target Rings for Eligible Tokens -->
+          {#if item.isEligible}
+            <circle cx="0" cy="0" r="18" fill="none" stroke="#ffffff" stroke-width="2.5" class="animate-ping opacity-75" />
+            <circle cx="0" cy="0" r="16" fill="none" stroke="#facc15" stroke-width="2" stroke-dasharray="3,3" />
+          {/if}
+
+          <!-- Pawn Shadow -->
+          <ellipse cx="0" cy="8" rx="12" ry="4" fill="rgba(0,0,0,0.35)" />
+
+          <!-- Pawn Base Ring -->
+          <ellipse cx="0" cy="5" rx="11" ry="4" fill="url(#{gradId})" stroke="#ffffff" stroke-width="0.8" />
+
+          <!-- Pawn Conical Body -->
+          <path
+            d="M -9,5 C -8,-2 -5,-8 0,-10 C 5,-8 8,-2 9,5 Z"
+            fill="url(#{gradId})"
             stroke="#ffffff"
-            stroke-width="1.5"
+            stroke-width="0.8"
           />
-          <text x="0" y="3" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="bold">{step + 1}</text>
+
+          <!-- Pawn Head Sphere -->
+          <circle cx="0" cy="-11" r="7" fill="url(#{gradId})" stroke="#ffffff" stroke-width="0.8" />
+
+          <!-- Specular Highlight for 3D Finish -->
+          <circle cx="-2" cy="-13" r="2.2" fill="rgba(255, 255, 255, 0.75)" />
+
+          <!-- Small Inner Badge with Token ID (1..4) -->
+          <text
+            x="0"
+            y="-2"
+            fill="#ffffff"
+            font-size="7"
+            font-weight="bold"
+            text-anchor="middle"
+            class="pointer-events-none"
+          >
+            {item.token.id + 1}
+          </text>
         </g>
       {/each}
-    {/each}
-
-    <!-- Yard Bases for joined players -->
-    {#each PLAYER_COLORS as color, pIdx}
-      {@const angle = (pIdx * 60 - 90) * (Math.PI / 180)}
-      {@const bx = CX + YARD_RADIUS * Math.cos(angle)}
-      {@const by = CY + YARD_RADIUS * Math.sin(angle)}
-      <g transform={`translate(${bx}, ${by})`}>
-        <circle r="46" fill="#0f172a" stroke={COLOR_CONFIG[color].hex} stroke-width="3" />
-        <!-- 4 Slot Holders -->
-        {#each [
-          { dx: -18, dy: -18 },
-          { dx: 18, dy: -18 },
-          { dx: -18, dy: 18 },
-          { dx: 18, dy: 18 }
-        ] as slot}
-          <circle cx={slot.dx} cy={slot.dy} r="11" fill="#1e293b" stroke={COLOR_CONFIG[color].hex} stroke-dasharray="2 2" />
-        {/each}
-      </g>
-    {/each}
-
-    <!-- Render Tokens for Active Players -->
-    {#each players as player}
-      {#if tokens[player.id]}
-        {#each tokens[player.id] as token}
-          {@const pos = getTokenPosition(player, token)}
-          {@const isEligible = activePlayerId === player.id && validTokenIds.includes(token.id)}
-          <g
-            transform={`translate(${pos.x}, ${pos.y})`}
-            class={isEligible ? 'token-active-pulse cursor-pointer' : ''}
-            onclick={() => isEligible && onTokenClick(token.id)}
-            role="button"
-            tabindex={isEligible ? 0 : -1}
-            onkeydown={(e) => {
-              if (isEligible && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault();
-                onTokenClick(token.id);
-              }
-            }}
-          >
-            <!-- Token Shadow -->
-            <circle cx="2" cy="3" r="13" fill="#000000" opacity="0.4" />
-            <!-- Token Body -->
-            <circle
-              cx="0"
-              cy="0"
-              r="12"
-              fill={COLOR_CONFIG[player.color].hex}
-              stroke="#ffffff"
-              stroke-width="2.5"
-            />
-            <!-- Token Center ID -->
-            <text x="0" y="4" text-anchor="middle" font-size="10" fill="#ffffff" font-weight="black">
-              {token.id + 1}
-            </text>
-          </g>
-        {/each}
-      {/if}
-    {/each}
+    </g>
   </svg>
 </div>

@@ -94,7 +94,7 @@ describe('End-to-End Game Flow with Sockets & SQLite', () => {
 
     // Client 1 creates room
     const createRes = await new Promise((res) => {
-      client1.emit('create_room', { name: 'Player1', timer: 10, maxPlayers: 6 }, res);
+      client1.emit('create_room', { name: 'Player1', timer: 10, maxPlayers: 4 }, res);
     });
     expect(createRes.success).toBe(true);
     const roomCode = createRes.room.code;
