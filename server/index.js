@@ -3,6 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { RoomManager } from './game/RoomManager.js';
 import { rollMathDice } from './game/MathDice.js';
 import {
@@ -30,6 +31,7 @@ const roomManager = new RoomManager();
 function startTurnTimer(room) {
   if (room.timerInterval) clearInterval(room.timerInterval);
   let timeLeft = room.game.currentTurnTimer;
+  room.timeLeft = timeLeft;
 
   io.to(room.code).emit('timer_tick', {
     timeLeft,
@@ -39,6 +41,8 @@ function startTurnTimer(room) {
 
   room.timerInterval = setInterval(() => {
     timeLeft -= 1;
+    room.timeLeft = timeLeft;
+
     io.to(room.code).emit('timer_tick', {
       timeLeft,
       totalTimer: room.game.currentTurnTimer,
@@ -49,6 +53,7 @@ function startTurnTimer(room) {
       clearInterval(room.timerInterval);
       // Timeout auto pass
       room.game.nextTurn();
+      room.timeLeft = room.game.currentTurnTimer;
       io.to(room.code).emit('turn_timeout', {
         nextPlayer: room.game.currentTurnPlayer,
         currentTimer: room.game.currentTurnTimer
@@ -59,32 +64,82 @@ function startTurnTimer(room) {
 }
 
 io.on('connection', socket => {
-  socket.on('create_room', ({ name, timer, maxPlayers }, callback) => {
+  socket.on('create_room', ({ name, timer, maxPlayers, sessionId }, callback) => {
     if (!name || name.trim().length < 2) {
       return callback({ success: false, error: 'Nama minimal 2 karakter!' });
     }
+    const safeSessionId = sessionId || `sess_${socket.id}`;
+    socket.data.sessionId = safeSessionId;
+
     const dbPlayer = getOrCreatePlayer(db, name);
     const room = roomManager.createRoom({ hostName: name, defaultTimer: timer, maxPlayers });
-    const joinRes = roomManager.joinRoom({ code: room.code, socketId: socket.id, name });
+    const joinRes = roomManager.joinRoom({
+      code: room.code,
+      socketId: socket.id,
+      sessionId: safeSessionId,
+      name
+    });
+
+    socket.data.roomCode = room.code;
     socket.join(room.code);
-    callback({ success: true, room: joinRes.room, player: { ...joinRes.player, dbId: dbPlayer.id } });
+    callback({
+      success: true,
+      room: joinRes.room,
+      player: { ...joinRes.player, dbId: dbPlayer.id }
+    });
   });
 
-  socket.on('join_room', ({ code, name }, callback) => {
+  socket.on('join_room', ({ code, name, sessionId }, callback) => {
     if (!name || name.trim().length < 2) {
       return callback({ success: false, error: 'Nama minimal 2 karakter!' });
     }
+    if (!code || code.trim().length !== 6) {
+      return callback({ success: false, error: 'Kode kamar harus 6 huruf!' });
+    }
+
+    const safeSessionId = sessionId || `sess_${socket.id}`;
+    socket.data.sessionId = safeSessionId;
+
     const dbPlayer = getOrCreatePlayer(db, name);
-    const res = roomManager.joinRoom({ code: code.toUpperCase(), socketId: socket.id, name });
+    const res = roomManager.joinRoom({
+      code: code.toUpperCase(),
+      socketId: socket.id,
+      sessionId: safeSessionId,
+      name
+    });
     if (res.error) return callback({ success: false, error: res.error });
 
+    socket.data.roomCode = res.room.code;
     socket.join(res.room.code);
+
+    // If game is already playing, return current gameplay state so player can immediately resume!
+    let gameStatePayload = {};
+    if (res.room.status === 'PLAYING' && res.room.game) {
+      gameStatePayload = {
+        gameStarted: true,
+        tokens: res.room.game.tokens,
+        activePlayer: res.room.game.currentTurnPlayer,
+        currentTimer: res.room.game.currentTurnTimer,
+        timeLeft: res.room.timeLeft ?? res.room.game.currentTurnTimer,
+        gameState: res.room.game.state,
+        currentRoll: res.room.game.pendingRoll,
+        validTokenIds: res.room.game.getValidMoves(safeSessionId),
+        winners: res.room.game.winners
+      };
+    }
+
     io.to(res.room.code).emit('room_updated', res.room);
-    callback({ success: true, room: res.room, player: { ...res.player, dbId: dbPlayer.id } });
+    callback({
+      success: true,
+      room: res.room,
+      player: { ...res.player, dbId: dbPlayer.id },
+      isRejoin: res.isRejoin,
+      ...gameStatePayload
+    });
   });
 
   socket.on('start_game', ({ code }, callback) => {
-    const res = roomManager.startGame(code, socket.id);
+    const res = roomManager.startGame(code, socket.data.sessionId || socket.id);
     if (res.error) return callback({ success: false, error: res.error });
 
     recordMatchStart(db, {
@@ -104,9 +159,13 @@ io.on('connection', socket => {
   });
 
   socket.on('roll_dice', ({ code }, callback) => {
-    const room = roomManager.rooms.get(code);
+    const room = roomManager.rooms.get((code || '').toUpperCase());
     if (!room || !room.game) return callback({ error: 'Permainan tidak ditemukan!' });
-    if (room.game.currentTurnPlayer.id !== socket.id || room.game.state !== 'WAITING_FOR_ROLL') {
+
+    const activeId = room.game.currentTurnPlayer.id;
+    const callerId = socket.data.sessionId || socket.id;
+
+    if (activeId !== callerId || room.game.state !== 'WAITING_FOR_ROLL') {
       return callback({ error: 'Bukan giliranmu untuk melempar!' });
     }
 
@@ -129,6 +188,7 @@ io.on('connection', socket => {
     if (rollMeta.autoSkip) {
       setTimeout(() => {
         room.game.nextTurn();
+        room.timeLeft = room.game.currentTurnTimer;
         io.to(code).emit('turn_passed', {
           nextPlayer: room.game.currentTurnPlayer,
           currentTimer: room.game.currentTurnTimer
@@ -141,10 +201,11 @@ io.on('connection', socket => {
   });
 
   socket.on('move_token', ({ code, tokenId }, callback) => {
-    const room = roomManager.rooms.get(code);
+    const room = roomManager.rooms.get((code || '').toUpperCase());
     if (!room || !room.game) return callback({ success: false, error: 'Permainan tidak ditemukan!' });
 
-    const moveRes = room.game.moveToken(socket.id, tokenId);
+    const callerId = socket.data.sessionId || socket.id;
+    const moveRes = room.game.moveToken(callerId, tokenId);
     if (!moveRes.success) return callback({ success: false, error: moveRes.reason });
 
     if (moveRes.captured) {
@@ -156,7 +217,7 @@ io.on('connection', socket => {
     }
 
     io.to(code).emit('token_moved', {
-      playerId: socket.id,
+      playerId: callerId,
       tokenId,
       tokens: room.game.tokens,
       captured: moveRes.captured,
@@ -181,15 +242,26 @@ io.on('connection', socket => {
     callback({ leaderboard: stats });
   });
 
-  socket.on('disconnect', () => {
-    const left = roomManager.leave(socket.id);
+  socket.on('leave_room', ({ code }, callback) => {
+    const callerId = socket.data.sessionId || socket.id;
+    const left = roomManager.leave(callerId);
     if (left) {
-      io.to(left.code).emit('player_left', { socketId: socket.id, room: left.room });
+      io.to(left.code).emit('player_left', { sessionId: callerId, room: left.room });
+    }
+    if (callback) callback({ success: true });
+  });
+
+  socket.on('disconnect', () => {
+    const left = roomManager.handleDisconnect(socket.id);
+    if (left) {
+      io.to(left.code).emit('player_connection_change', {
+        player: left.player,
+        room: left.room
+      });
     }
   });
 });
 
-import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Serve SvelteKit SSR build in production or placeholder in dev

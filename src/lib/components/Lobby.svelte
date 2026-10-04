@@ -8,6 +8,7 @@
     onCreateRoom = () => {},
     onJoinRoom = () => {},
     onStartGame = () => {},
+    onLeaveRoom = () => {},
     onShowLeaderboard = () => {}
   } = $props();
 
@@ -17,6 +18,7 @@
   let selectedMaxPlayers = $state(6);
   let errorMessage = $state('');
   let copied = $state(false);
+  let isSubmitting = $state(false);
 
   function handleCreate() {
     errorMessage = '';
@@ -24,11 +26,18 @@
       errorMessage = 'Silakan masukkan nama minimal 2 karakter.';
       return;
     }
-    onCreateRoom({
-      name: playerName.trim(),
-      timer: selectedTimer,
-      maxPlayers: selectedMaxPlayers
-    });
+    isSubmitting = true;
+    onCreateRoom(
+      {
+        name: playerName.trim(),
+        timer: selectedTimer,
+        maxPlayers: selectedMaxPlayers
+      },
+      (err) => {
+        isSubmitting = false;
+        if (err) errorMessage = err;
+      }
+    );
   }
 
   function handleJoin() {
@@ -41,10 +50,17 @@
       errorMessage = 'Kode kamar harus terdiri dari 6 karakter.';
       return;
     }
-    onJoinRoom({
-      name: playerName.trim(),
-      code: joinCode.trim()
-    });
+    isSubmitting = true;
+    onJoinRoom(
+      {
+        name: playerName.trim(),
+        code: joinCode.trim()
+      },
+      (err) => {
+        isSubmitting = false;
+        if (err) errorMessage = err;
+      }
+    );
   }
 
   function copyCode() {
@@ -73,7 +89,7 @@
 
     <!-- Error Banner -->
     {#if errorMessage}
-      <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 text-center">
+      <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 text-center font-medium animate-shake">
         {errorMessage}
       </div>
     {/if}
@@ -90,20 +106,26 @@
         bind:value={playerName}
         placeholder="Ketik namamu..."
         class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white font-medium placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            if (mode === 'CREATE') handleCreate();
+            else if (mode === 'JOIN') handleJoin();
+          }
+        }}
       />
     </div>
 
     {#if mode === 'HOME'}
       <div class="grid grid-cols-2 gap-3 pt-2">
         <button
-          onclick={() => (mode = 'CREATE')}
+          onclick={() => { errorMessage = ''; mode = 'CREATE'; }}
           class="py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2"
         >
           <span>➕</span>
           <span>Buat Kamar</span>
         </button>
         <button
-          onclick={() => (mode = 'JOIN')}
+          onclick={() => { errorMessage = ''; mode = 'JOIN'; }}
           class="py-3.5 px-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-slate-200 font-bold rounded-xl border border-slate-700 shadow-lg transition flex items-center justify-center gap-2"
         >
           <span>🔑</span>
@@ -159,17 +181,18 @@
         <div class="flex gap-2 pt-2">
           <button
             type="button"
-            onclick={() => (mode = 'HOME')}
+            onclick={() => { errorMessage = ''; mode = 'HOME'; }}
             class="w-1/3 py-3 bg-slate-800 text-slate-300 hover:bg-slate-700 font-semibold rounded-xl transition"
           >
             Batal
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
             onclick={handleCreate}
-            class="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition active:scale-[0.98]"
+            class="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition active:scale-[0.98]"
           >
-            Mulai Buat Kamar
+            {isSubmitting ? 'Membuat...' : 'Mulai Buat Kamar'}
           </button>
         </div>
       </div>
@@ -187,23 +210,27 @@
             bind:value={joinCode}
             placeholder="CONTOH: ABC123"
             class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono uppercase text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+            onkeydown={(e) => {
+              if (e.key === 'Enter') handleJoin();
+            }}
           />
         </div>
 
         <div class="flex gap-2 pt-2">
           <button
             type="button"
-            onclick={() => (mode = 'HOME')}
+            onclick={() => { errorMessage = ''; mode = 'HOME'; }}
             class="w-1/3 py-3 bg-slate-800 text-slate-300 hover:bg-slate-700 font-semibold rounded-xl transition"
           >
             Batal
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
             onclick={handleJoin}
-            class="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition active:scale-[0.98]"
+            class="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition active:scale-[0.98]"
           >
-            Masuk Sekarang
+            {isSubmitting ? 'Masuk...' : 'Masuk Sekarang'}
           </button>
         </div>
       </div>
@@ -218,12 +245,20 @@
             {room.code}
           </div>
         </div>
-        <button
-          onclick={copyCode}
-          class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition"
-        >
-          {copied ? 'Tersalin!' : 'Salin Kode'}
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            onclick={copyCode}
+            class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition"
+          >
+            {copied ? 'Tersalin!' : 'Salin Kode'}
+          </button>
+          <button
+            onclick={onLeaveRoom}
+            class="px-3 py-2 bg-rose-950/60 hover:bg-rose-900 border border-rose-800/80 text-rose-300 text-xs font-bold rounded-lg transition"
+          >
+            Keluar
+          </button>
+        </div>
       </div>
 
       <!-- Settings summary -->
@@ -241,15 +276,20 @@
           {#each room.players as p}
             <div class="flex items-center gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl">
               <div
-                class="w-4 h-4 rounded-full shadow-md"
+                class="w-4 h-4 rounded-full shadow-md flex-shrink-0"
                 style="background-color: {COLOR_CONFIG[p.color].hex}"
               ></div>
               <div class="flex-1 min-w-0">
-                <div class="text-sm font-bold text-white truncate">{p.name}</div>
+                <div class="text-sm font-bold text-white truncate flex items-center gap-1.5">
+                  <span>{p.name}</span>
+                  {#if p.connected === false}
+                    <span class="text-[10px] text-rose-400 font-normal">(Terputus)</span>
+                  {/if}
+                </div>
                 <div class="text-[10px] text-slate-500">Warna {COLOR_CONFIG[p.color].name}</div>
               </div>
               {#if p.isHost}
-                <span class="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded-md">
+                <span class="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded-md flex-shrink-0">
                   Host
                 </span>
               {/if}
@@ -268,7 +308,7 @@
           {room.players.length < 2 ? 'Menunggu Minimal 2 Pemain...' : 'Mulai Permainan Sekarang'}
         </button>
       {:else}
-        <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-slate-400">
+        <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-slate-400 animate-pulse">
           Menunggu Host memulai permainan...
         </div>
       {/if}

@@ -10,6 +10,7 @@
   import '../app.css';
 
   let socket = $state(null);
+  let sessionId = $state('');
   let playerName = $state('');
   let currentRoom = $state(null);
   let myPlayer = $state(null);
@@ -30,13 +31,27 @@
   let soundEnabled = $state(true);
 
   onMount(() => {
+    // 1. Session Persistence Setup
+    let storedSessionId = localStorage.getItem('ludo_math_session_id');
+    if (!storedSessionId) {
+      storedSessionId = 'sess_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
+      localStorage.setItem('ludo_math_session_id', storedSessionId);
+    }
+    sessionId = storedSessionId;
+
     const savedName = localStorage.getItem('ludo_math_player_name');
     if (savedName) playerName = savedName;
+
+    const savedRoomCode = localStorage.getItem('ludo_math_room_code');
 
     socket = getSocket();
     if (!socket) return;
 
     socket.on('room_updated', (room) => {
+      currentRoom = room;
+    });
+
+    socket.on('player_connection_change', ({ room }) => {
       currentRoom = room;
     });
 
@@ -111,27 +126,76 @@
       showDiceModal = false;
     });
 
-    socket.on('player_left', ({ room }) => {
+    socket.on('player_left', ({ sessionId: leftId, room }) => {
       currentRoom = room;
     });
+
+    // 2. Reconnect & restore session automatically on page refresh
+    if (savedRoomCode && savedName) {
+      socket.emit('join_room', { code: savedRoomCode, name: savedName, sessionId }, (res) => {
+        if (res && res.success) {
+          currentRoom = res.room;
+          myPlayer = res.player;
+          if (res.gameStarted) {
+            gameView = 'PLAYING';
+            tokens = res.tokens || {};
+            activePlayer = res.activePlayer;
+            totalTimer = res.currentTimer || 10;
+            timeLeft = res.timeLeft ?? 10;
+            gameState = res.gameState || 'WAITING_FOR_ROLL';
+            currentRoll = res.currentRoll || null;
+            validTokenIds = res.validTokenIds || [];
+            showDiceModal = !!currentRoll;
+            winners = res.winners || [];
+          } else {
+            gameView = 'LOBBY';
+          }
+        } else {
+          // If room no longer exists on server, clear stale room code
+          localStorage.removeItem('ludo_math_room_code');
+        }
+      });
+    }
   });
 
-  function handleCreateRoom({ name, timer, maxPlayers }) {
+  function handleCreateRoom({ name, timer, maxPlayers }, callback) {
     localStorage.setItem('ludo_math_player_name', name);
-    socket.emit('create_room', { name, timer, maxPlayers }, (res) => {
-      if (res.success) {
+    socket.emit('create_room', { name, timer, maxPlayers, sessionId }, (res) => {
+      if (res && res.success) {
         currentRoom = res.room;
         myPlayer = res.player;
+        localStorage.setItem('ludo_math_room_code', res.room.code);
+        if (callback) callback(null);
+      } else {
+        if (callback) callback(res?.error || 'Gagal membuat kamar.');
       }
     });
   }
 
-  function handleJoinRoom({ name, code }) {
+  function handleJoinRoom({ name, code }, callback) {
     localStorage.setItem('ludo_math_player_name', name);
-    socket.emit('join_room', { name, code }, (res) => {
-      if (res.success) {
+    socket.emit('join_room', { name, code, sessionId }, (res) => {
+      if (res && res.success) {
         currentRoom = res.room;
         myPlayer = res.player;
+        localStorage.setItem('ludo_math_room_code', res.room.code);
+
+        if (res.gameStarted) {
+          gameView = 'PLAYING';
+          tokens = res.tokens || {};
+          activePlayer = res.activePlayer;
+          totalTimer = res.currentTimer || 10;
+          timeLeft = res.timeLeft ?? 10;
+          gameState = res.gameState || 'WAITING_FOR_ROLL';
+          currentRoll = res.currentRoll || null;
+          validTokenIds = res.validTokenIds || [];
+          showDiceModal = !!currentRoll;
+          winners = res.winners || [];
+        }
+
+        if (callback) callback(null);
+      } else {
+        if (callback) callback(res?.error || 'Kamar tidak ditemukan.');
       }
     });
   }
@@ -161,7 +225,19 @@
   }
 
   function leaveGame() {
-    window.location.reload();
+    if (currentRoom && socket) {
+      socket.emit('leave_room', { code: currentRoom.code });
+    }
+    localStorage.removeItem('ludo_math_room_code');
+    currentRoom = null;
+    myPlayer = null;
+    gameView = 'LOBBY';
+    tokens = {};
+    activePlayer = null;
+    validTokenIds = [];
+    currentRoll = null;
+    showDiceModal = false;
+    winners = [];
   }
 </script>
 
@@ -217,13 +293,14 @@
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
         onStartGame={handleStartGame}
+        onLeaveRoom={leaveGame}
         onShowLeaderboard={openLeaderboard}
       />
     {:else if gameView === 'PLAYING'}
       <!-- Turn HUD -->
       <TurnHUD
         {activePlayer}
-        myPlayerId={socket?.id}
+        myPlayerId={sessionId}
         {timeLeft}
         {totalTimer}
         {gameState}
