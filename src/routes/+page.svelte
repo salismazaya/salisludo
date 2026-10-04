@@ -184,7 +184,7 @@
         localStorage.setItem('ludo_math_room_code', res.room.code);
         if (callback) callback(null);
       } else {
-        if (callback) callback(res?.error || 'Gagal membuat kamar.');
+        if (callback) callback(res?.error || 'Gagal membuat room.');
       }
     });
   }
@@ -201,8 +201,8 @@
           gameView = 'PLAYING';
           tokens = res.tokens || {};
           activePlayer = res.activePlayer;
-          totalTimer = res.currentTimer || 5;
-          timeLeft = res.timeLeft ?? 5;
+          totalTimer = res.currentTimer || 30;
+          timeLeft = res.timeLeft ?? 30;
           gameState = res.gameState || 'WAITING_FOR_ROLL';
           if (res.currentChallenge) currentChallenge = res.currentChallenge;
           currentRoll = res.currentRoll || null;
@@ -212,7 +212,7 @@
 
         if (callback) callback(null);
       } else {
-        if (callback) callback(res?.error || 'Kamar tidak ditemukan.');
+        if (callback) callback(res?.error || 'Room tidak ditemukan.');
       }
     });
   }
@@ -342,7 +342,7 @@
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
         </div>
-        <p class="font-black text-black text-base uppercase">Menghubungkan kembali ke kamar...</p>
+        <p class="font-black text-black text-base uppercase">Menghubungkan kembali ke room...</p>
         <p class="text-xs text-slate-700 font-bold">Memulihkan sesi permainanmu</p>
       </div>
     {:else if gameView === 'LOBBY'}

@@ -47,7 +47,7 @@ export class RoomManager {
   joinRoom({ code, socketId, sessionId, name }) {
     const cleanCode = (code || '').trim().toUpperCase();
     const room = this.rooms.get(cleanCode);
-    if (!room) return { error: 'Kamar tidak ditemukan! Periksa kembali kode kamar.' };
+    if (!room) return { error: 'Room tidak ditemukan! Periksa kembali kode room.' };
 
     const trimmedName = (name || '').trim();
     const playerId = sessionId || socketId;
@@ -73,12 +73,12 @@ export class RoomManager {
 
     // 2. If new player trying to join an already playing game
     if (room.status !== 'LOBBY') {
-      return { error: 'Permainan di kamar ini sudah berlangsung.' };
+      return { error: 'Permainan di room ini sudah berlangsung.' };
     }
 
     // 3. Check capacity (max 4 players)
     if (room.players.length >= room.maxPlayers) {
-      return { error: `Kamar sudah penuh (maksimal ${room.maxPlayers} pemain).` };
+      return { error: `Room sudah penuh (maksimal ${room.maxPlayers} pemain).` };
     }
 
     const color = PLAYER_COLORS[room.players.length];
@@ -97,7 +97,7 @@ export class RoomManager {
   startGame(code, sessionId) {
     const cleanCode = (code || '').trim().toUpperCase();
     const room = this.rooms.get(cleanCode);
-    if (!room) return { error: 'Kamar tidak ditemukan' };
+    if (!room) return { error: 'Room tidak ditemukan' };
     const player = room.players.find(p => p.id === sessionId);
     if (!player || !player.isHost) return { error: 'Hanya host yang bisa memulai permainan' };
     if (room.players.length < 2) return { error: 'Minimal butuh 2 pemain untuk memulai' };

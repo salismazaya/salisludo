@@ -192,7 +192,7 @@ io.on('connection', (socket) => {
         return callback({ success: false, error: 'Nama minimal 2 karakter!' });
       }
       if (!code || code.trim().length !== 6) {
-        return callback({ success: false, error: 'Kode kamar harus 6 huruf!' });
+        return callback({ success: false, error: 'Kode room harus 6 huruf!' });
       }
 
       const safeSessionId = sessionId || `sess_${socket.id}`;
@@ -247,13 +247,13 @@ io.on('connection', (socket) => {
       }
       const room = roomManager.rooms.get(code.toUpperCase());
       if (!room) {
-        return callback({ success: false, error: 'Kamar tidak ditemukan' });
+        return callback({ success: false, error: 'Room tidak ditemukan' });
       }
 
       // Cari player berdasarkan sessionId
       const existingPlayer = room.players.find(p => p.id === sessionId);
       if (!existingPlayer) {
-        return callback({ success: false, error: 'Pemain tidak ditemukan di kamar ini' });
+        return callback({ success: false, error: 'Pemain tidak ditemukan di room ini' });
       }
 
       // Hubungkan kembali socket

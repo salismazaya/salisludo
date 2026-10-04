@@ -57,7 +57,7 @@
       return;
     }
     if (!joinCode.trim()) {
-      errorMessage = 'Kode kamar tidak boleh kosong';
+      errorMessage = 'Kode room tidak boleh kosong';
       return;
     }
     if (typeof window !== 'undefined') {
@@ -148,7 +148,7 @@
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            <span>Buat Kamar</span>
+            <span>Buat Room</span>
           </button>
           <button
             onclick={() => { errorMessage = ''; mode = 'JOIN'; }}
@@ -219,7 +219,7 @@
         <div class="space-y-4 pt-2 border-t-2 border-black">
           <div class="space-y-1.5">
             <label for="room-code" class="block text-xs font-black text-black uppercase tracking-wider">
-              Kode Kamar (6 Huruf)
+              Kode Room (6 Huruf)
             </label>
             <input
               id="room-code"
@@ -247,7 +247,7 @@
               onclick={handleJoin}
               class="py-3 px-4 bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 text-black font-black uppercase text-xs border-2 border-black shadow-[3px_3px_0px_#000] transition"
             >
-              Masuk Kamar
+              Masuk Room
             </button>
           </div>
         </div>
@@ -258,7 +258,7 @@
     <div class="bg-white border-4 border-black p-6 sm:p-8 shadow-[8px_8px_0px_#000] space-y-6">
       <div class="flex items-center justify-between border-b-2 border-black pb-4">
         <div>
-          <span class="text-xs font-black uppercase tracking-wider text-slate-700">Kode Kamar</span>
+          <span class="text-xs font-black uppercase tracking-wider text-slate-700">Kode Room</span>
           <div class="text-3xl font-black font-mono tracking-wider text-black">
             {room.code}
           </div>
@@ -304,20 +304,36 @@
         </div>
       </div>
 
-      <!-- Start Button for Host -->
-      {#if isHost}
+      <!-- Start Button for Host & Leave Button -->
+      <div class="space-y-3 pt-2">
+        {#if isHost}
+          <button
+            onclick={onStartGame}
+            disabled={!canStart}
+            class="w-full py-3.5 px-4 font-black uppercase text-sm tracking-wider border-3 border-black shadow-[4px_4px_0px_#000] transition flex items-center justify-center gap-2 {canStart ? 'bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 text-black cursor-pointer' : 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'}"
+          >
+            {canStart ? 'Mulai Permainan Sekarang' : 'Menunggu Minimal 2 Pemain...'}
+          </button>
+        {:else}
+          <div class="p-3 bg-[#FFE600] border-2 border-black shadow-[2px_2px_0px_#000] text-center text-xs font-black uppercase text-black">
+            Menunggu Host memulai permainan...
+          </div>
+        {/if}
+
+        <!-- Tombol Keluar Room -->
         <button
-          onclick={onStartGame}
-          disabled={!canStart}
-          class="w-full py-3.5 px-4 font-black uppercase text-sm tracking-wider border-3 border-black shadow-[4px_4px_0px_#000] transition flex items-center justify-center gap-2 {canStart ? 'bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 text-black cursor-pointer' : 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'}"
+          type="button"
+          onclick={onLeaveRoom}
+          class="w-full py-3 px-4 bg-[#FF6B6B] hover:bg-[#EE5253] active:translate-x-0.5 active:translate-y-0.5 text-black font-black uppercase text-xs tracking-wider border-3 border-black shadow-[3px_3px_0px_#000] transition flex items-center justify-center gap-2"
         >
-          {canStart ? 'Mulai Permainan Sekarang' : 'Menunggu Minimal 2 Pemain...'}
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span>Keluar dari Room</span>
         </button>
-      {:else}
-        <div class="p-3 bg-[#FFE600] border-2 border-black shadow-[2px_2px_0px_#000] text-center text-xs font-black uppercase text-black">
-          Menunggu Host memulai permainan...
-        </div>
-      {/if}
+      </div>
     </div>
   {/if}
 </div>
