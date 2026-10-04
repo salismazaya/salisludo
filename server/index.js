@@ -453,11 +453,12 @@ io.on('connection', (socket) => {
         tokens: room.game.tokens,
         captured: moveRes.captured,
         extraTurn: moveRes.extraTurn,
-        nextPlayer: room.game.currentTurnPlayer,
+        activePlayer: room.game.currentTurnPlayer,
         currentTimer: room.game.currentTurnTimer,
         currentChallenge: room.game.currentChallenge,
         finished: moveRes.finished,
-        winners: room.game.winners
+        winners: room.game.winners,
+        gameState: room.game.state
       });
 
       if (!moveRes.finished) {

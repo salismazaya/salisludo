@@ -122,10 +122,10 @@
   });
 </script>
 
-<div class="w-full max-w-[580px] aspect-square mx-auto p-2 bg-slate-900/90 rounded-3xl border border-slate-800 shadow-2xl flex items-center justify-center">
+<div class="w-full max-w-[760px] aspect-square mx-auto p-1 sm:p-3 flex items-center justify-center">
   <svg
     viewBox="0 0 600 600"
-    class="w-full h-full select-none rounded-2xl overflow-hidden shadow-inner bg-slate-950"
+    class="w-full h-full select-none border-4 border-black shadow-[6px_6px_0px_#000] bg-white"
   >
     <defs>
       <!-- Gradients for 3D Pawn Tokens -->
@@ -378,18 +378,25 @@
     <g id="tokens-layer">
       {#each allRenderedTokens as item}
         {@const gradId = `token-${item.color}`}
+        <!-- Bounding Box for Easy Clicking on Mobile/Desktop (Large Touch Target) -->
+        <circle
+          cx={item.renderX}
+          cy={item.renderY}
+          r="26"
+          fill="transparent"
+          class="cursor-pointer"
+          onclick={() => {
+            onTokenClick(item.token.id);
+          }}
+        />
+
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <g
           transform="translate({item.renderX}, {item.renderY})"
-          style="transform: translate({item.renderX}px, {item.renderY}px); transition: transform 0.65s cubic-bezier(0.34, 1.3, 0.64, 1); will-change: transform;"
-          class="pawn-node {item.isEligible ? 'cursor-pointer is-eligible' : ''}"
+          style="transform: translate({item.renderX}px, {item.renderY}px); transition: transform 0.65s cubic-bezier(0.34, 1.3, 0.64, 1); will-change: transform; pointer-events: none;"
+          class="pawn-node {item.isEligible ? 'is-eligible' : ''}"
           filter={item.isEligible ? 'url(#active-glow)' : 'url(#pawn-shadow)'}
-          onclick={() => {
-            if (item.isEligible) {
-              onTokenClick(item.token.id);
-            }
-          }}
         >
           <!-- Active Pulsing Target Rings for Eligible Tokens -->
           {#if item.isEligible}

@@ -5,11 +5,12 @@ let socket = null;
 export function getSocket() {
   if (!socket && typeof window !== 'undefined') {
     socket = io({
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
+      upgrade: false,
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 500,
-      reconnectionDelayMax: 2000,
+      reconnectionDelay: 200,
+      reconnectionDelayMax: 1000,
       timeout: 10000
     });
   }

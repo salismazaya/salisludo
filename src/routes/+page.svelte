@@ -372,7 +372,7 @@
       />
 
       <!-- Scalable SVG Board (15x15 Classic Grid) -->
-      <div class="p-2 sm:p-4 bg-white border-4 border-black shadow-[8px_8px_0px_#000] flex justify-center items-center">
+      <div class="w-full max-w-4xl p-2 sm:p-4 bg-white border-4 border-black shadow-[8px_8px_0px_#000] flex justify-center items-center">
         <BoardSvg
           players={currentRoom?.players ?? []}
           {tokens}
