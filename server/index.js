@@ -240,6 +240,59 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('rejoin_room', ({ code, sessionId }, callback) => {
+    try {
+      if (!code || !sessionId) {
+        return callback({ success: false, error: 'Kode atau sesi tidak valid' });
+      }
+      const room = roomManager.rooms.get(code.toUpperCase());
+      if (!room) {
+        return callback({ success: false, error: 'Kamar tidak ditemukan' });
+      }
+
+      // Cari player berdasarkan sessionId
+      const existingPlayer = room.players.find(p => p.id === sessionId);
+      if (!existingPlayer) {
+        return callback({ success: false, error: 'Pemain tidak ditemukan di kamar ini' });
+      }
+
+      // Hubungkan kembali socket
+      existingPlayer.socketId = socket.id;
+      existingPlayer.connected = true;
+      socket.data.sessionId = sessionId;
+      socket.data.roomCode = room.code;
+      socket.join(room.code);
+
+      let gameStatePayload = {};
+      if (room.status === 'PLAYING' && room.game) {
+        gameStatePayload = {
+          gameStarted: true,
+          tokens: room.game.tokens,
+          activePlayer: room.game.currentTurnPlayer,
+          currentTimer: room.game.currentTurnTimer,
+          currentChallenge: room.game.currentChallenge,
+          timeLeft: room.timeLeft ?? room.game.currentTurnTimer,
+          gameState: room.game.state,
+          currentRoll: room.game.pendingRoll,
+          validTokenIds: room.game.getValidMoves(sessionId),
+          winners: room.game.winners
+        };
+      }
+
+      io.to(room.code).emit('room_updated', toPublicRoom(room));
+      callback({
+        success: true,
+        room: toPublicRoom(room),
+        player: existingPlayer,
+        isRejoin: true,
+        ...gameStatePayload
+      });
+    } catch (err) {
+      console.error('Error in rejoin_room:', err);
+      callback({ success: false, error: 'Gagal menghubungkan ulang' });
+    }
+  });
+
   socket.on('start_game', ({ code }, callback) => {
     try {
       const res = roomManager.startGame(code, socket.data.sessionId || socket.id);

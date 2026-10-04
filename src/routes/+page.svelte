@@ -45,11 +45,19 @@
 
     socket = getSocket();
 
+    // Pastikan loading tidak gantung jika socket butuh waktu konek
+    const timeoutTimer = setTimeout(() => {
+      if (isRestoringSession) {
+        isRestoringSession = false;
+      }
+    }, 2000);
+
     socket.on('connect', () => {
       // Rejoin existing room if available
       const savedCode = localStorage.getItem('ludo_math_room_code');
       if (savedCode && sessionId) {
         socket.emit('rejoin_room', { code: savedCode, sessionId }, (res) => {
+          clearTimeout(timeoutTimer);
           isRestoringSession = false;
           if (res && res.success) {
             currentRoom = res.room;
@@ -58,8 +66,8 @@
               gameView = 'PLAYING';
               tokens = res.tokens || {};
               activePlayer = res.activePlayer;
-              totalTimer = res.currentTimer || 5;
-              timeLeft = res.timeLeft ?? 5;
+              totalTimer = res.currentTimer || 30;
+              timeLeft = res.timeLeft ?? 30;
               gameState = res.gameState || 'WAITING_FOR_ROLL';
               if (res.currentChallenge) currentChallenge = res.currentChallenge;
               currentRoll = res.currentRoll || null;
@@ -68,10 +76,12 @@
             }
           } else {
             localStorage.removeItem('ludo_math_room_code');
+            currentRoom = null;
             gameView = 'LOBBY';
           }
         });
       } else {
+        clearTimeout(timeoutTimer);
         isRestoringSession = false;
       }
     });
@@ -79,6 +89,10 @@
     socket.on('player_joined', (data) => {
       currentRoom = data.room;
       if (soundEnabled) sounds.playJoin();
+    });
+
+    socket.on('room_updated', (data) => {
+      currentRoom = data;
     });
 
     socket.on('player_left', (data) => {
