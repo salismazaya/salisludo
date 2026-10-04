@@ -1,4 +1,5 @@
 import { computeTokenTargetPosition, isSafeSquare } from './Board.js';
+import { generateChallenge } from './MathDice.js';
 
 export class LudoGame {
   constructor({ id, defaultTimer = 10, players }) {
@@ -9,6 +10,7 @@ export class LudoGame {
     this.currentTurnIndex = 0;
     this.consecutiveSixes = 0;
     this.pendingRoll = null;
+    this.currentChallenge = generateChallenge();
     this.state = 'WAITING_FOR_ROLL'; // 'WAITING_FOR_ROLL' | 'WAITING_FOR_MOVE' | 'FINISHED'
     this.winners = [];
 
@@ -147,13 +149,14 @@ export class LudoGame {
 
     if (getsBonus) {
       if (this.pendingRoll.extraTurn) {
-        // Roll 6: timer is halved (minimum 2s)
+        // Roll 6 / -6: timer is halved (minimum 2s)
         this.currentTurnTimer = Math.max(2, Math.floor(this.currentTurnTimer / 2));
       } else {
         // Capture / Home bonus: full timer reset
         this.currentTurnTimer = this.defaultTimer;
       }
       this.pendingRoll = null;
+      this.currentChallenge = generateChallenge();
       this.state = 'WAITING_FOR_ROLL';
     } else {
       this.nextTurn();
@@ -165,6 +168,7 @@ export class LudoGame {
       extraTurn: getsBonus,
       nextPlayer: this.currentTurnPlayer,
       currentTimer: this.currentTurnTimer,
+      currentChallenge: this.currentChallenge,
       finished: false,
       winners: this.winners
     };
@@ -174,6 +178,7 @@ export class LudoGame {
     this.consecutiveSixes = 0;
     this.currentTurnTimer = this.defaultTimer;
     this.pendingRoll = null;
+    this.currentChallenge = generateChallenge();
     this.state = 'WAITING_FOR_ROLL';
 
     if (this.winners.length >= this.players.length) return;

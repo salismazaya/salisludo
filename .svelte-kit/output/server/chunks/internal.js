@@ -104,12 +104,12 @@ const options = {
 <html lang="id">
 	<head>
 		<meta charset="utf-8" />
-		<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>" />
+		<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><rect width='18' height='18' x='3' y='3' rx='4'/></svg>" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		` + head + '\n	</head>\n	<body data-sveltekit-preload-data="hover">\n		<div style="display: contents">' + body + "</div>\n	</body>\n</html>\n",
     error
   },
-  version_hash: "1elmdgw"
+  version_hash: "11mxwsd"
 };
 async function get_hooks() {
   let handle;

@@ -1351,6 +1351,10 @@ function attributes(attrs, css_hash, classes, styles, flags = 0) {
 function stringify(value) {
   return typeof value === "string" ? value : value == null ? "" : value + "";
 }
+function attr_class(value, hash, directives) {
+  var result = to_class(value, hash, directives);
+  return result ? ` class="${escape_html(result, true)}"` : "";
+}
 function attr_style(value, directives) {
   var result = to_style(value, directives);
   return result ? ` style="${escape_html(result, true)}"` : "";
@@ -1428,12 +1432,13 @@ export {
   render as a2,
   setContext as a3,
   derived as a4,
-  attr as a5,
-  ensure_array_like as a6,
-  attr_style as a7,
-  stringify as a8,
-  bind_props as a9,
-  head as aa,
+  ensure_array_like as a5,
+  attr as a6,
+  stringify as a7,
+  attr_class as a8,
+  attr_style as a9,
+  bind_props as aa,
+  head as ab,
   HYDRATION_END as b,
   HYDRATION_START as c,
   define_property as d,

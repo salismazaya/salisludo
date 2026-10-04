@@ -105,9 +105,9 @@ export function computeTokenTargetPosition({ color, currentPos, steps, direction
   if (steps === 0 || direction === 'STAY') return currentPos;
   const startSq = getStartSquare(color);
 
-  // In Yard: only 6 FORWARD exits yard
+  // In Yard: both 6 (forward) and -6 (backward) can release pawn to start square
   if (currentPos.type === 'YARD') {
-    if (steps === 6 && direction === 'FORWARD') {
+    if (steps === 6) {
       return { type: 'TRACK', index: startSq };
     }
     return null;

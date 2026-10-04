@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateDice, rollMathDice } from '../game/MathDice.js';
+import { calculateDice, rollMathDice, calculateRollWithInput, generateChallenge } from '../game/MathDice.js';
 
 describe('MathDice calculation rules', () => {
   it('maps 7 to 1 forward', () => {
@@ -22,6 +22,11 @@ describe('MathDice calculation rules', () => {
     expect(res).toEqual({ steps: 6, direction: 'FORWARD', raw: 6, extraTurn: true });
   });
 
+  it('maps -6 to 6 backward with extra turn flag (-6 atau 6 bergerak dua kali)', () => {
+    const res = calculateDice(-6);
+    expect(res).toEqual({ steps: 6, direction: 'BACKWARD', raw: -6, extraTurn: true });
+  });
+
   it('maps 0 to 0 stay', () => {
     const res = calculateDice(0);
     expect(res).toEqual({ steps: 0, direction: 'STAY', raw: 0, extraTurn: false });
@@ -31,7 +36,22 @@ describe('MathDice calculation rules', () => {
     expect(calculateDice(-7)).toEqual({ steps: 1, direction: 'BACKWARD', raw: -7, extraTurn: false });
     expect(calculateDice(-8)).toEqual({ steps: 2, direction: 'BACKWARD', raw: -8, extraTurn: false });
     expect(calculateDice(-5)).toEqual({ steps: 5, direction: 'BACKWARD', raw: -5, extraTurn: false });
-    expect(calculateDice(-6)).toEqual({ steps: 6, direction: 'BACKWARD', raw: -6, extraTurn: false });
+  });
+
+  it('calculates roll from screen number, op, and user input', () => {
+    // 40 + (-34) = 6 -> forward 6, extra turn
+    const roll1 = calculateRollWithInput({ screenNumber: 40, op: '+', userInput: -34 });
+    expect(roll1.raw).toBe(6);
+    expect(roll1.steps).toBe(6);
+    expect(roll1.direction).toBe('FORWARD');
+    expect(roll1.extraTurn).toBe(true);
+
+    // 10 - 16 = -6 -> backward 6, extra turn
+    const roll2 = calculateRollWithInput({ screenNumber: 10, op: '-', userInput: 16 });
+    expect(roll2.raw).toBe(-6);
+    expect(roll2.steps).toBe(6);
+    expect(roll2.direction).toBe('BACKWARD');
+    expect(roll2.extraTurn).toBe(true);
   });
 
   it('generates random equation with bounds -100 to 100', () => {

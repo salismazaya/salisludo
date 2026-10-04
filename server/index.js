@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { RoomManager, toPublicRoom } from './game/RoomManager.js';
-import { rollMathDice } from './game/MathDice.js';
+import { rollMathDice, calculateRollWithInput } from './game/MathDice.js';
 import {
   createDb,
   getOrCreatePlayer,
@@ -43,7 +43,9 @@ function startTurnTimer(room) {
   io.to(room.code).emit('timer_tick', {
     timeLeft,
     totalTimer: room.game.currentTurnTimer,
-    activePlayerId: room.game.currentTurnPlayer.id
+    activePlayerId: room.game.currentTurnPlayer.id,
+    currentChallenge: room.game.currentChallenge,
+    isPaused: false
   });
 
   const interval = setInterval(() => {
@@ -53,7 +55,9 @@ function startTurnTimer(room) {
     io.to(room.code).emit('timer_tick', {
       timeLeft,
       totalTimer: room.game.currentTurnTimer,
-      activePlayerId: room.game.currentTurnPlayer.id
+      activePlayerId: room.game.currentTurnPlayer.id,
+      currentChallenge: room.game.currentChallenge,
+      isPaused: false
     });
 
     if (timeLeft <= 0) {
@@ -63,7 +67,8 @@ function startTurnTimer(room) {
       room.timeLeft = room.game.currentTurnTimer;
       io.to(room.code).emit('turn_timeout', {
         nextPlayer: room.game.currentTurnPlayer,
-        currentTimer: room.game.currentTurnTimer
+        currentTimer: room.game.currentTurnTimer,
+        currentChallenge: room.game.currentChallenge
       });
       startTurnTimer(room);
     }
@@ -134,6 +139,7 @@ io.on('connection', (socket) => {
           tokens: res.room.game.tokens,
           activePlayer: res.room.game.currentTurnPlayer,
           currentTimer: res.room.game.currentTurnTimer,
+          currentChallenge: res.room.game.currentChallenge,
           timeLeft: res.room.timeLeft ?? res.room.game.currentTurnTimer,
           gameState: res.room.game.state,
           currentRoll: res.room.game.pendingRoll,
@@ -171,7 +177,8 @@ io.on('connection', (socket) => {
         players: res.room.players.map(p => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
         tokens: res.room.game.tokens,
         activePlayer: res.room.game.currentTurnPlayer,
-        currentTimer: res.room.game.currentTurnTimer
+        currentTimer: res.room.game.currentTurnTimer,
+        currentChallenge: res.room.game.currentChallenge
       });
       startTurnTimer(res.room);
       callback({ success: true });
@@ -181,7 +188,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('roll_dice', ({ code }, callback) => {
+  socket.on('roll_dice', ({ code, inputNumber }, callback) => {
     try {
       const room = roomManager.rooms.get((code || '').toUpperCase());
       if (!room || !room.game) return callback({ error: 'Permainan tidak ditemukan!' });
@@ -193,7 +200,21 @@ io.on('connection', (socket) => {
         return callback({ error: 'Bukan giliranmu untuk melempar!' });
       }
 
-      const roll = rollMathDice();
+      // Stop turn timer immediately so player can choose pawn at their own pace
+      roomManager.stopTimer(room.code);
+      room.timeLeft = null;
+
+      const challenge = room.game.currentChallenge || { screenNumber: 0, op: '+' };
+      const safeInput = inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
+        ? Math.round(Number(inputNumber))
+        : Math.floor(Math.random() * 201) - 100;
+
+      const roll = calculateRollWithInput({
+        screenNumber: challenge.screenNumber,
+        op: challenge.op,
+        userInput: safeInput
+      });
+
       const rollMeta = room.game.applyRoll(roll);
 
       recordRollLog(db, {
@@ -205,7 +226,17 @@ io.on('connection', (socket) => {
       io.to(code).emit('dice_rolled', {
         roll,
         validTokenIds: rollMeta.validTokenIds,
-        autoSkip: rollMeta.autoSkip
+        autoSkip: rollMeta.autoSkip,
+        penalty: rollMeta.penalty
+      });
+
+      // Notify clients timer is paused for pawn selection
+      io.to(code).emit('timer_tick', {
+        timeLeft: null,
+        totalTimer: room.game.currentTurnTimer,
+        activePlayerId: activeId,
+        currentChallenge: challenge,
+        isPaused: true
       });
 
       if (rollMeta.autoSkip) {
@@ -214,7 +245,8 @@ io.on('connection', (socket) => {
           room.timeLeft = room.game.currentTurnTimer;
           io.to(code).emit('turn_passed', {
             nextPlayer: room.game.currentTurnPlayer,
-            currentTimer: room.game.currentTurnTimer
+            currentTimer: room.game.currentTurnTimer,
+            currentChallenge: room.game.currentChallenge
           });
           startTurnTimer(room);
         }, 2000);
@@ -252,6 +284,7 @@ io.on('connection', (socket) => {
         extraTurn: moveRes.extraTurn,
         nextPlayer: room.game.currentTurnPlayer,
         currentTimer: room.game.currentTurnTimer,
+        currentChallenge: room.game.currentChallenge,
         finished: moveRes.finished,
         winners: room.game.winners
       });

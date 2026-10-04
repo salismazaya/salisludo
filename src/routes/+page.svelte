@@ -3,7 +3,6 @@
   import { getSocket } from '$lib/socket.js';
   import { sounds } from '$lib/sound.js';
   import BoardSvg from '$lib/components/BoardSvg.svelte';
-  import DiceModal from '$lib/components/DiceModal.svelte';
   import TurnHUD from '$lib/components/TurnHUD.svelte';
   import Lobby from '$lib/components/Lobby.svelte';
   import Leaderboard from '$lib/components/Leaderboard.svelte';
@@ -22,8 +21,8 @@
   let timeLeft = $state(10);
   let totalTimer = $state(10);
   let gameState = $state('WAITING_FOR_ROLL');
+  let currentChallenge = $state({ screenNumber: 0, op: '+' });
   let currentRoll = $state(null);
-  let showDiceModal = $state(false);
   let validTokenIds = $state([]);
   let winners = $state([]);
   let showLeaderboard = $state(false);
@@ -50,15 +49,14 @@
             totalTimer = res.currentTimer || 10;
             timeLeft = res.timeLeft ?? 10;
             gameState = res.gameState || 'WAITING_FOR_ROLL';
+            if (res.currentChallenge) currentChallenge = res.currentChallenge;
             currentRoll = res.currentRoll || null;
             validTokenIds = res.validTokenIds || [];
-            showDiceModal = !!currentRoll;
             winners = res.winners || [];
           } else {
             gameView = 'LOBBY';
           }
         } else {
-          // If room expired or invalid, clear stale room code
           localStorage.removeItem('ludo_math_room_code');
         }
       });
@@ -66,7 +64,6 @@
   }
 
   onMount(() => {
-    // 1. Session Persistence Setup
     let storedSessionId = localStorage.getItem('ludo_math_session_id');
     if (!storedSessionId) {
       storedSessionId = 'sess_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
@@ -81,7 +78,6 @@
     if (!socket) return;
 
     socket.on('connect', () => {
-      // Re-trigger session restore on socket connect / reconnect
       attemptRestoreSession();
     });
 
@@ -93,15 +89,15 @@
       currentRoom = room;
     });
 
-    socket.on('game_started', ({ players, tokens: initialTokens, activePlayer: active, currentTimer }) => {
+    socket.on('game_started', ({ tokens: initialTokens, activePlayer: active, currentTimer, currentChallenge: challenge }) => {
       gameView = 'PLAYING';
       tokens = initialTokens;
       activePlayer = active;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
+      if (challenge) currentChallenge = challenge;
       gameState = 'WAITING_FOR_ROLL';
       currentRoll = null;
-      showDiceModal = false;
       validTokenIds = [];
       winners = [];
     });
@@ -109,13 +105,13 @@
     socket.on('timer_tick', (data) => {
       timeLeft = data.timeLeft;
       totalTimer = data.totalTimer;
+      if (data.currentChallenge) currentChallenge = data.currentChallenge;
     });
 
     socket.on('dice_rolled', ({ roll, validTokenIds: valid, autoSkip }) => {
       if (soundEnabled) sounds.playRoll();
       currentRoll = roll;
       validTokenIds = valid;
-      showDiceModal = true;
       gameState = autoSkip ? 'WAITING_FOR_ROLL' : 'WAITING_FOR_MOVE';
 
       if (roll.extraTurn && soundEnabled) {
@@ -123,14 +119,14 @@
       }
     });
 
-    socket.on('token_moved', ({ tokens: updatedTokens, captured, extraTurn, nextPlayer, currentTimer, finished, winners: winList }) => {
+    socket.on('token_moved', ({ tokens: updatedTokens, captured, extraTurn, nextPlayer, currentTimer, currentChallenge: challenge, finished, winners: winList }) => {
       tokens = updatedTokens;
       activePlayer = nextPlayer;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
+      if (challenge) currentChallenge = challenge;
       gameState = 'WAITING_FOR_ROLL';
       validTokenIds = [];
-      showDiceModal = false;
 
       if (captured && soundEnabled) {
         sounds.playCapture();
@@ -146,29 +142,28 @@
       }
     });
 
-    socket.on('turn_timeout', ({ nextPlayer, currentTimer }) => {
+    socket.on('turn_timeout', ({ nextPlayer, currentTimer, currentChallenge: challenge }) => {
       activePlayer = nextPlayer;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
+      if (challenge) currentChallenge = challenge;
       gameState = 'WAITING_FOR_ROLL';
       validTokenIds = [];
-      showDiceModal = false;
     });
 
-    socket.on('turn_passed', ({ nextPlayer, currentTimer }) => {
+    socket.on('turn_passed', ({ nextPlayer, currentTimer, currentChallenge: challenge }) => {
       activePlayer = nextPlayer;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
+      if (challenge) currentChallenge = challenge;
       gameState = 'WAITING_FOR_ROLL';
       validTokenIds = [];
-      showDiceModal = false;
     });
 
-    socket.on('player_left', ({ sessionId: leftId, room }) => {
+    socket.on('player_left', ({ room }) => {
       currentRoom = room;
     });
 
-    // If socket is already connected when onMount runs, restore immediately
     if (socket.connected) {
       attemptRestoreSession();
     }
@@ -203,9 +198,9 @@
           totalTimer = res.currentTimer || 10;
           timeLeft = res.timeLeft ?? 10;
           gameState = res.gameState || 'WAITING_FOR_ROLL';
+          if (res.currentChallenge) currentChallenge = res.currentChallenge;
           currentRoll = res.currentRoll || null;
           validTokenIds = res.validTokenIds || [];
-          showDiceModal = !!currentRoll;
           winners = res.winners || [];
         }
 
@@ -221,14 +216,13 @@
     socket.emit('start_game', { code: currentRoom.code }, () => {});
   }
 
-  function handleRollDice() {
+  function handleRollDice(inputNumber) {
     if (!currentRoom) return;
-    socket.emit('roll_dice', { code: currentRoom.code }, () => {});
+    socket.emit('roll_dice', { code: currentRoom.code, inputNumber }, () => {});
   }
 
   function handleSelectToken(tokenId) {
     if (!currentRoom) return;
-    showDiceModal = false;
     socket.emit('move_token', { code: currentRoom.code, tokenId }, () => {});
   }
 
@@ -252,7 +246,6 @@
     activePlayer = null;
     validTokenIds = [];
     currentRoll = null;
-    showDiceModal = false;
     winners = [];
   }
 </script>
@@ -352,7 +345,7 @@
         onShowLeaderboard={openLeaderboard}
       />
     {:else if gameView === 'PLAYING'}
-      <!-- Turn HUD -->
+      <!-- Turn HUD with Interactive Math Input & Non-blocking Result Display -->
       <TurnHUD
         {activePlayer}
         myPlayerId={sessionId}
@@ -360,6 +353,8 @@
         {totalTimer}
         {gameState}
         {validTokenIds}
+        {currentChallenge}
+        {currentRoll}
         onRoll={handleRollDice}
       />
 
@@ -371,14 +366,6 @@
         activePlayerId={activePlayer?.id}
         onTokenClick={handleSelectToken}
       />
-
-      <!-- Dice Math Explanation Modal -->
-      {#if showDiceModal}
-        <DiceModal
-          roll={currentRoll}
-          onClose={() => (showDiceModal = false)}
-        />
-      {/if}
     {:else if gameView === 'FINISHED'}
       <!-- Game Over / Winner Screen -->
       <div class="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
@@ -419,7 +406,7 @@
 
   <!-- Footer Info -->
   <footer class="text-center py-4 text-xs text-slate-600">
-    Ludo Dadu Matematika &bull; Aturan Dadu: 7 jadi 1, 8 jadi 2, 5 jadi 5, 0 diam, 6 lempar lagi (waktu giliran dibagi 2)
+    Ludo Dadu Matematika &bull; Input angka untuk dikalkulasikan dengan angka layar &bull; 6 atau -6 bergerak dua kali atau keluarkan bidak
   </footer>
 
   <!-- Leaderboard Modal Dialog -->

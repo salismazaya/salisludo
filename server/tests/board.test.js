@@ -35,6 +35,34 @@ describe('Board Topology (4 Players - 15x15 Classic Ludo)', () => {
     expect(SAFE_SQUARES).toHaveLength(8);
   });
 
+  it('allows token in yard to exit on 6 forward and -6 backward', () => {
+    // 6 Forward exits yard
+    const exitForward = computeTokenTargetPosition({
+      color: 'red',
+      currentPos: { type: 'YARD', index: 0 },
+      steps: 6,
+      direction: 'FORWARD'
+    });
+    expect(exitForward).toEqual({ type: 'TRACK', index: 0 });
+
+    // -6 Backward also exits yard (-6 atau 6 keluarkan pawn)
+    const exitBackward = computeTokenTargetPosition({
+      color: 'red',
+      currentPos: { type: 'YARD', index: 0 },
+      steps: 6,
+      direction: 'BACKWARD'
+    });
+    expect(exitBackward).toEqual({ type: 'TRACK', index: 0 });
+
+    // Other steps cannot exit yard
+    const invalidExit = computeTokenTargetPosition({
+      color: 'red',
+      currentPos: { type: 'YARD', index: 0 },
+      steps: 5,
+      direction: 'FORWARD'
+    });
+    expect(invalidExit).toBeNull();
+  });
   it('calculates forward movement on circular track', () => {
     // Red starts at 0, moving forward 5 steps -> track index 5
     const pos1 = computeTokenTargetPosition({
