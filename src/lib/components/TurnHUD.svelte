@@ -11,8 +11,7 @@
     currentChallenge = null,
     currentRoll = null,
     onSpin = () => {},
-    onRoll = () => {},
-    onSelectToken = () => {}
+    onRoll = () => {}
   } = $props();
 
   let userNumberInput = $state('');
@@ -248,44 +247,12 @@
               </div>
             {/if}
           </div>
-        </div>
 
-        <!-- WAJIB MEMILIH BIDAK UNTUK BERGERAK -->
-        <div class="p-3.5 bg-amber-500/15 border-2 border-amber-400/80 rounded-2xl space-y-2.5 shadow-lg">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="relative flex h-3 w-3">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-400"></span>
-              </span>
-              <span class="text-xs sm:text-sm font-black text-amber-300 uppercase tracking-wide">
-                Wajib Memilih Bidak untuk Bergerak!
-              </span>
-            </div>
-            <span class="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/30">
-              Timer Dijeda
-            </span>
+          <!-- Clean Single Hint (Tanpa Tombol/Popup Bidak 1/2) -->
+          <div class="pt-1 flex items-center justify-center gap-2 text-xs font-semibold text-amber-300">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            <span>Silakan klik langsung bidakmu di papan untuk bergerak</span>
           </div>
-
-          <!-- Tombol Cepat Pemilihan Bidak -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-            {#each validTokenIds as tokId}
-              <button
-                type="button"
-                onclick={() => onSelectToken(tokId)}
-                class="py-2.5 px-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow transition active:scale-95 flex items-center justify-center gap-1.5"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <span>Pilih Bidak {tokId + 1}</span>
-              </button>
-            {/each}
-          </div>
-
-          <p class="text-[11px] text-amber-200/90 text-center font-medium">
-            Bisa klik tombol bidak di atas atau langsung klik bidak yang berdenyut di papan.
-          </p>
         </div>
       </div>
     {/if}
