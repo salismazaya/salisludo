@@ -1,0 +1,49 @@
+import { describe, it, expect } from 'vitest';
+import { calculateDice, rollMathDice } from '../game/MathDice.js';
+
+describe('MathDice calculation rules', () => {
+  it('maps 7 to 1 forward', () => {
+    const res = calculateDice(7);
+    expect(res).toEqual({ steps: 1, direction: 'FORWARD', raw: 7, extraTurn: false });
+  });
+
+  it('maps 8 to 2 forward', () => {
+    const res = calculateDice(8);
+    expect(res).toEqual({ steps: 2, direction: 'FORWARD', raw: 8, extraTurn: false });
+  });
+
+  it('maps 5 to 5 forward', () => {
+    const res = calculateDice(5);
+    expect(res).toEqual({ steps: 5, direction: 'FORWARD', raw: 5, extraTurn: false });
+  });
+
+  it('maps 6 to 6 forward with extra turn flag', () => {
+    const res = calculateDice(6);
+    expect(res).toEqual({ steps: 6, direction: 'FORWARD', raw: 6, extraTurn: true });
+  });
+
+  it('maps 0 to 0 stay', () => {
+    const res = calculateDice(0);
+    expect(res).toEqual({ steps: 0, direction: 'STAY', raw: 0, extraTurn: false });
+  });
+
+  it('maps negative numbers to backward steps', () => {
+    expect(calculateDice(-7)).toEqual({ steps: 1, direction: 'BACKWARD', raw: -7, extraTurn: false });
+    expect(calculateDice(-8)).toEqual({ steps: 2, direction: 'BACKWARD', raw: -8, extraTurn: false });
+    expect(calculateDice(-5)).toEqual({ steps: 5, direction: 'BACKWARD', raw: -5, extraTurn: false });
+    expect(calculateDice(-6)).toEqual({ steps: 6, direction: 'BACKWARD', raw: -6, extraTurn: false });
+  });
+
+  it('generates random equation with bounds -100 to 100', () => {
+    for (let i = 0; i < 50; i++) {
+      const roll = rollMathDice();
+      expect(roll.a).toBeGreaterThanOrEqual(-100);
+      expect(roll.a).toBeLessThanOrEqual(100);
+      expect(roll.b).toBeGreaterThanOrEqual(-100);
+      expect(roll.b).toBeLessThanOrEqual(100);
+      expect(['+', '-']).toContain(roll.op);
+      const expectedRaw = roll.op === '+' ? roll.a + roll.b : roll.a - roll.b;
+      expect(roll.raw).toBe(expectedRaw);
+    }
+  });
+});
