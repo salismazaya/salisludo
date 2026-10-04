@@ -19,6 +19,11 @@
     onTokenClick = () => {}
   } = $props();
 
+  const greenPlayer = $derived(players.find(p => p.color === 'green'));
+  const yellowPlayer = $derived(players.find(p => p.color === 'yellow'));
+  const redPlayer = $derived(players.find(p => p.color === 'red'));
+  const bluePlayer = $derived(players.find(p => p.color === 'blue'));
+
   // Helper to map a token's logical position to pixel coordinates [x, y]
   function getTokenCoordinates(playerColor, token, tokenId) {
     if (!token) return { x: 300, y: 300 };
@@ -161,55 +166,87 @@
 
     <!-- 2. FOUR CORNER YARDS (BASES) -->
     <!-- Green Yard (Top-Left: 6x6 cells) -->
-    <g>
+    <g class={activePlayerId === greenPlayer?.id ? 'active-yard' : ''}>
       <rect x="0" y="0" width="240" height="240" fill="#10B981" />
+      {#if activePlayerId === greenPlayer?.id}
+        <rect x="3" y="3" width="234" height="234" rx="6" fill="none" stroke="#6ee7b7" stroke-width="4" stroke-dasharray="8,6" class="animate-pulse" />
+      {/if}
       <rect x="30" y="30" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
       {#each YARD_PIXEL_COORDS.green as pt, i}
         <circle cx={pt.x} cy={pt.y} r="22" fill="#d1fae5" stroke="#10b981" stroke-width="3" />
         <circle cx={pt.x} cy={pt.y} r="8" fill="#a7f3d0" />
       {/each}
-      <text x="120" y="25" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
-        HIJAU
+      <rect x="15" y="8" width="210" height="20" rx="10" fill={activePlayerId === greenPlayer?.id ? '#047857' : 'rgba(0,0,0,0.25)'} />
+      <text x="120" y="22" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="0.5">
+        {#if activePlayerId === greenPlayer?.id}★ {/if}{greenPlayer ? greenPlayer.name.toUpperCase() : 'MENUNGGU'}{#if activePlayerId === greenPlayer?.id} ★{/if}
       </text>
+      {#if activePlayerId === greenPlayer?.id}
+        <circle cx="28" cy="18" r="4" fill="#34d399" class="animate-ping" />
+        <circle cx="28" cy="18" r="3" fill="#ffffff" />
+      {/if}
     </g>
 
     <!-- Yellow Yard (Top-Right: 6x6 cells) -->
-    <g>
+    <g class={activePlayerId === yellowPlayer?.id ? 'active-yard' : ''}>
       <rect x="360" y="0" width="240" height="240" fill="#F59E0B" />
+      {#if activePlayerId === yellowPlayer?.id}
+        <rect x="363" y="3" width="234" height="234" rx="6" fill="none" stroke="#fde047" stroke-width="4" stroke-dasharray="8,6" class="animate-pulse" />
+      {/if}
       <rect x="390" y="30" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
       {#each YARD_PIXEL_COORDS.yellow as pt, i}
         <circle cx={pt.x} cy={pt.y} r="22" fill="#fef3c7" stroke="#f59e0b" stroke-width="3" />
         <circle cx={pt.x} cy={pt.y} r="8" fill="#fde68a" />
       {/each}
-      <text x="480" y="25" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
-        KUNING
+      <rect x="375" y="8" width="210" height="20" rx="10" fill={activePlayerId === yellowPlayer?.id ? '#b45309' : 'rgba(0,0,0,0.25)'} />
+      <text x="480" y="22" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="0.5">
+        {#if activePlayerId === yellowPlayer?.id}★ {/if}{yellowPlayer ? yellowPlayer.name.toUpperCase() : 'MENUNGGU'}{#if activePlayerId === yellowPlayer?.id} ★{/if}
       </text>
+      {#if activePlayerId === yellowPlayer?.id}
+        <circle cx="388" cy="18" r="4" fill="#fde047" class="animate-ping" />
+        <circle cx="388" cy="18" r="3" fill="#ffffff" />
+      {/if}
     </g>
 
     <!-- Red Yard (Bottom-Left: 6x6 cells) -->
-    <g>
+    <g class={activePlayerId === redPlayer?.id ? 'active-yard' : ''}>
       <rect x="0" y="360" width="240" height="240" fill="#EF4444" />
+      {#if activePlayerId === redPlayer?.id}
+        <rect x="3" y="363" width="234" height="234" rx="6" fill="none" stroke="#fca5a5" stroke-width="4" stroke-dasharray="8,6" class="animate-pulse" />
+      {/if}
       <rect x="30" y="390" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
       {#each YARD_PIXEL_COORDS.red as pt, i}
         <circle cx={pt.x} cy={pt.y} r="22" fill="#fee2e2" stroke="#ef4444" stroke-width="3" />
         <circle cx={pt.x} cy={pt.y} r="8" fill="#fecaca" />
       {/each}
-      <text x="120" y="385" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
-        MERAH
+      <rect x="15" y="368" width="210" height="20" rx="10" fill={activePlayerId === redPlayer?.id ? '#b91c1c' : 'rgba(0,0,0,0.25)'} />
+      <text x="120" y="382" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="0.5">
+        {#if activePlayerId === redPlayer?.id}★ {/if}{redPlayer ? redPlayer.name.toUpperCase() : 'MENUNGGU'}{#if activePlayerId === redPlayer?.id} ★{/if}
       </text>
+      {#if activePlayerId === redPlayer?.id}
+        <circle cx="28" cy="378" r="4" fill="#fca5a5" class="animate-ping" />
+        <circle cx="28" cy="378" r="3" fill="#ffffff" />
+      {/if}
     </g>
 
     <!-- Blue Yard (Bottom-Right: 6x6 cells) -->
-    <g>
+    <g class={activePlayerId === bluePlayer?.id ? 'active-yard' : ''}>
       <rect x="360" y="360" width="240" height="240" fill="#3B82F6" />
+      {#if activePlayerId === bluePlayer?.id}
+        <rect x="363" y="363" width="234" height="234" rx="6" fill="none" stroke="#93c5fd" stroke-width="4" stroke-dasharray="8,6" class="animate-pulse" />
+      {/if}
       <rect x="390" y="390" width="180" height="180" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
       {#each YARD_PIXEL_COORDS.blue as pt, i}
         <circle cx={pt.x} cy={pt.y} r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="3" />
         <circle cx={pt.x} cy={pt.y} r="8" fill="#bfdbfe" />
       {/each}
-      <text x="480" y="385" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">
-        BIRU
+      <rect x="375" y="368" width="210" height="20" rx="10" fill={activePlayerId === bluePlayer?.id ? '#1d4ed8' : 'rgba(0,0,0,0.25)'} />
+      <text x="480" y="382" fill="#ffffff" font-size="11" font-weight="900" text-anchor="middle" letter-spacing="0.5">
+        {#if activePlayerId === bluePlayer?.id}★ {/if}{bluePlayer ? bluePlayer.name.toUpperCase() : 'MENUNGGU'}{#if activePlayerId === bluePlayer?.id} ★{/if}
       </text>
+      {#if activePlayerId === bluePlayer?.id}
+        <circle cx="388" cy="378" r="4" fill="#93c5fd" class="animate-ping" />
+        <circle cx="388" cy="378" r="3" fill="#ffffff" />
+      {/if}
     </g>
 
     <!-- 3. TRACK CELLS (52 Cells) -->
@@ -345,7 +382,8 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <g
           transform="translate({item.renderX}, {item.renderY})"
-          class="transition-transform duration-300 {item.isEligible ? 'cursor-pointer' : ''}"
+          style="transform: translate({item.renderX}px, {item.renderY}px); transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); will-change: transform;"
+          class="pawn-node {item.isEligible ? 'cursor-pointer is-eligible' : ''}"
           filter={item.isEligible ? 'url(#active-glow)' : 'url(#pawn-shadow)'}
           onclick={() => {
             if (item.isEligible) {
@@ -355,8 +393,8 @@
         >
           <!-- Active Pulsing Target Rings for Eligible Tokens -->
           {#if item.isEligible}
-            <circle cx="0" cy="0" r="18" fill="none" stroke="#ffffff" stroke-width="2.5" class="animate-ping opacity-75" />
-            <circle cx="0" cy="0" r="16" fill="none" stroke="#facc15" stroke-width="2" stroke-dasharray="3,3" />
+            <circle cx="0" cy="0" r="19" fill="none" stroke="#ffffff" stroke-width="2.5" class="animate-ping opacity-75" />
+            <circle cx="0" cy="0" r="17" fill="none" stroke="#facc15" stroke-width="2" stroke-dasharray="3,3" />
           {/if}
 
           <!-- Pawn Shadow -->
@@ -396,3 +434,13 @@
     </g>
   </svg>
 </div>
+
+<style>
+  :global(.pawn-node) {
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-box: fill-box;
+  }
+  :global(.active-yard) {
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+  }
+</style>

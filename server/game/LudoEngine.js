@@ -10,8 +10,8 @@ export class LudoGame {
     this.currentTurnIndex = 0;
     this.consecutiveSixes = 0;
     this.pendingRoll = null;
-    this.currentChallenge = generateChallenge();
-    this.state = 'WAITING_FOR_ROLL'; // 'WAITING_FOR_ROLL' | 'WAITING_FOR_MOVE' | 'FINISHED'
+    this.currentChallenge = null;
+    this.state = 'WAITING_FOR_SPIN'; // 'WAITING_FOR_SPIN' | 'WAITING_FOR_INPUT' | 'WAITING_FOR_MOVE' | 'FINISHED'
     this.winners = [];
 
     // Initialize 4 tokens per player
@@ -27,6 +27,18 @@ export class LudoGame {
 
   get currentTurnPlayer() {
     return this.players[this.currentTurnIndex];
+  }
+
+  spinChallenge(playerId) {
+    if (this.currentTurnPlayer.id !== playerId) {
+      throw new Error('Bukan giliranmu');
+    }
+    if (this.state === 'WAITING_FOR_INPUT' && this.currentChallenge) {
+      return this.currentChallenge;
+    }
+    this.currentChallenge = generateChallenge();
+    this.state = 'WAITING_FOR_INPUT';
+    return this.currentChallenge;
   }
 
   applyRoll(rollResult) {
@@ -52,7 +64,8 @@ export class LudoGame {
     const validTokenIds = this.getValidMoves(this.currentTurnPlayer.id);
 
     if (validTokenIds.length === 0) {
-      this.state = 'WAITING_FOR_ROLL';
+      this.state = 'WAITING_FOR_SPIN';
+      this.currentChallenge = null;
       return { autoSkip: true, validTokenIds: [] };
     }
 
@@ -87,46 +100,57 @@ export class LudoGame {
 
   moveToken(playerId, tokenId) {
     if (this.currentTurnPlayer.id !== playerId || this.state !== 'WAITING_FOR_MOVE') {
-      return { success: false, reason: 'NOT_YOUR_TURN' };
+      throw new Error('Not your turn to move or invalid game state');
     }
 
-    const player = this.players.find(p => p.id === playerId);
-    const token = this.tokens[playerId]?.[tokenId];
-    if (!token) return { success: false, reason: 'TOKEN_NOT_FOUND' };
+    const player = this.currentTurnPlayer;
+    const tokens = this.tokens[playerId] || [];
+    const token = tokens.find(t => t.id === tokenId);
+    if (!token) throw new Error('Token not found');
 
-    const target = computeTokenTargetPosition({
+    const targetPos = computeTokenTargetPosition({
       color: player.color,
       currentPos: token,
       steps: this.pendingRoll.steps,
       direction: this.pendingRoll.direction
     });
 
-    if (!target) return { success: false, reason: 'INVALID_MOVE' };
-
-    const wasHome = target.type === 'HOME';
-
-    // Move token to target
-    token.type = target.type;
-    token.index = target.index;
-
-    let captured = null;
-    // Check capture on TRACK if target not a safe square
-    if (target.type === 'TRACK' && !isSafeSquare(target.index)) {
-      for (const p of this.players) {
-        if (p.id === playerId) continue;
-        for (const oppTok of this.tokens[p.id]) {
-          if (oppTok.type === 'TRACK' && oppTok.index === target.index) {
-            oppTok.type = 'YARD';
-            oppTok.index = oppTok.id;
-            captured = { playerId: p.id, tokenId: oppTok.id, playerName: p.name };
-            break;
-          }
-        }
-        if (captured) break;
-      }
+    if (!targetPos) {
+      throw new Error('Invalid move for this token');
     }
 
-    // Check if player won (all 4 tokens home)
+    // Execute move
+    token.type = targetPos.type;
+    token.index = targetPos.index;
+
+    // Check if token reached HOME
+    const wasHome = token.type === 'HOME';
+
+    // Capture logic (only on TRACK and not in SAFE_SQUARES)
+    let captured = null;
+    if (token.type === 'TRACK' && !isSafeSquare(token.index)) {
+      // Check for opponent tokens on this square
+      this.players.forEach(otherPlayer => {
+        if (otherPlayer.id !== playerId) {
+          const oppTokens = this.tokens[otherPlayer.id] || [];
+          oppTokens.forEach(oppToken => {
+            if (oppToken.type === 'TRACK' && oppToken.index === token.index) {
+              // Send back to YARD
+              oppToken.type = 'YARD';
+              oppToken.index = oppToken.id;
+              captured = {
+                playerId: otherPlayer.id,
+                victimPlayerId: otherPlayer.id,
+                victimColor: otherPlayer.color,
+                victimTokenId: oppToken.id
+              };
+            }
+          });
+        }
+      });
+    }
+
+    // Check Win condition (all 4 tokens reached HOME)
     const finishedTokens = this.tokens[playerId].filter(t => t.type === 'HOME').length;
     if (finishedTokens === 4 && !this.winners.includes(playerId)) {
       this.winners.push(playerId);
@@ -142,7 +166,7 @@ export class LudoGame {
     }
 
     // Extra turn condition:
-    // 1) Rolled positive 6
+    // 1) Rolled 6 or -6 (extraTurn)
     // 2) Captured an opponent's piece
     // 3) Successfully reached HOME
     const getsBonus = this.pendingRoll.extraTurn || captured !== null || wasHome;
@@ -156,8 +180,8 @@ export class LudoGame {
         this.currentTurnTimer = this.defaultTimer;
       }
       this.pendingRoll = null;
-      this.currentChallenge = generateChallenge();
-      this.state = 'WAITING_FOR_ROLL';
+      this.currentChallenge = null;
+      this.state = 'WAITING_FOR_SPIN';
     } else {
       this.nextTurn();
     }
@@ -178,8 +202,8 @@ export class LudoGame {
     this.consecutiveSixes = 0;
     this.currentTurnTimer = this.defaultTimer;
     this.pendingRoll = null;
-    this.currentChallenge = generateChallenge();
-    this.state = 'WAITING_FOR_ROLL';
+    this.currentChallenge = null;
+    this.state = 'WAITING_FOR_SPIN';
 
     if (this.winners.length >= this.players.length) return;
 

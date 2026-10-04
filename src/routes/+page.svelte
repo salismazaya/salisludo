@@ -21,7 +21,7 @@
   let timeLeft = $state(10);
   let totalTimer = $state(10);
   let gameState = $state('WAITING_FOR_ROLL');
-  let currentChallenge = $state({ screenNumber: 0, op: '+' });
+  let currentChallenge = $state(null);
   let currentRoll = $state(null);
   let validTokenIds = $state([]);
   let winners = $state([]);
@@ -89,23 +89,27 @@
       currentRoom = room;
     });
 
-    socket.on('game_started', ({ tokens: initialTokens, activePlayer: active, currentTimer, currentChallenge: challenge }) => {
+    socket.on('game_started', ({ tokens: initialTokens, activePlayer: active, currentTimer }) => {
       gameView = 'PLAYING';
       tokens = initialTokens;
       activePlayer = active;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
-      if (challenge) currentChallenge = challenge;
+      currentChallenge = null;
       gameState = 'WAITING_FOR_ROLL';
       currentRoll = null;
       validTokenIds = [];
       winners = [];
     });
 
+    socket.on('challenge_ready', ({ currentChallenge: challenge }) => {
+      currentChallenge = challenge;
+    });
+
     socket.on('timer_tick', (data) => {
       timeLeft = data.timeLeft;
       totalTimer = data.totalTimer;
-      if (data.currentChallenge) currentChallenge = data.currentChallenge;
+      if (data.currentChallenge !== undefined) currentChallenge = data.currentChallenge;
     });
 
     socket.on('dice_rolled', ({ roll, validTokenIds: valid, autoSkip }) => {
@@ -119,12 +123,12 @@
       }
     });
 
-    socket.on('token_moved', ({ tokens: updatedTokens, captured, extraTurn, nextPlayer, currentTimer, currentChallenge: challenge, finished, winners: winList }) => {
+    socket.on('token_moved', ({ tokens: updatedTokens, captured, extraTurn, nextPlayer, currentTimer, finished, winners: winList }) => {
       tokens = updatedTokens;
       activePlayer = nextPlayer;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
-      if (challenge) currentChallenge = challenge;
+      currentChallenge = null;
       gameState = 'WAITING_FOR_ROLL';
       validTokenIds = [];
 
@@ -142,20 +146,20 @@
       }
     });
 
-    socket.on('turn_timeout', ({ nextPlayer, currentTimer, currentChallenge: challenge }) => {
+    socket.on('turn_timeout', ({ nextPlayer, currentTimer }) => {
       activePlayer = nextPlayer;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
-      if (challenge) currentChallenge = challenge;
+      currentChallenge = null;
       gameState = 'WAITING_FOR_ROLL';
       validTokenIds = [];
     });
 
-    socket.on('turn_passed', ({ nextPlayer, currentTimer, currentChallenge: challenge }) => {
+    socket.on('turn_passed', ({ nextPlayer, currentTimer }) => {
       activePlayer = nextPlayer;
       totalTimer = currentTimer;
       timeLeft = currentTimer;
-      if (challenge) currentChallenge = challenge;
+      currentChallenge = null;
       gameState = 'WAITING_FOR_ROLL';
       validTokenIds = [];
     });
@@ -214,6 +218,12 @@
   function handleStartGame() {
     if (!currentRoom) return;
     socket.emit('start_game', { code: currentRoom.code }, () => {});
+  }
+
+  function handleSpinDice() {
+    if (!currentRoom) return;
+    if (soundEnabled) sounds.playRoll();
+    socket.emit('spin_dice', { code: currentRoom.code }, () => {});
   }
 
   function handleRollDice(inputNumber) {
@@ -355,6 +365,7 @@
         {validTokenIds}
         {currentChallenge}
         {currentRoll}
+        onSpin={handleSpinDice}
         onRoll={handleRollDice}
       />
 

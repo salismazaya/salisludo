@@ -8,12 +8,20 @@
     totalTimer = 10,
     gameState = 'WAITING_FOR_ROLL',
     validTokenIds = [],
-    currentChallenge = { screenNumber: 0, op: '+' },
+    currentChallenge = null,
     currentRoll = null,
+    onSpin = () => {},
     onRoll = () => {}
   } = $props();
 
   let userNumberInput = $state('');
+
+  // Hapus input angka saat selesai move / challenge direset
+  $effect(() => {
+    if (!currentChallenge) {
+      userNumberInput = '';
+    }
+  });
 
   const isMyTurn = $derived(activePlayer?.id === myPlayerId);
   const activeColor = $derived(activePlayer ? COLOR_CONFIG[activePlayer.color] : null);
@@ -25,42 +33,51 @@
   function handleSubmitRoll() {
     let num = Number(userNumberInput);
     if (userNumberInput === '' || isNaN(num)) {
-      // Default to 0 or quick random
       num = 0;
     }
+    // Clamp to -20 .. 20 if needed or round
     onRoll(Math.round(num));
+    userNumberInput = '';
   }
 
   function setTargetResult(target) {
     const screenNum = currentChallenge?.screenNumber ?? 0;
     const op = currentChallenge?.op ?? '+';
-    // If op === '+': screenNum + input = target => input = target - screenNum
-    // If op === '-': screenNum - input = target => input = screenNum - target
+    // op === '+': screenNum + input = target => input = target - screenNum
+    // op === '-': screenNum - input = target => input = screenNum - target
     let needed = op === '+' ? target - screenNum : screenNum - target;
     userNumberInput = String(needed);
   }
 
   function setRandomNumber() {
-    userNumberInput = String(Math.floor(Math.random() * 201) - 100);
+    userNumberInput = String(Math.floor(Math.random() * 41) - 20); // -20 to 20
   }
 </script>
 
 <div class="w-full max-w-xl mx-auto bg-slate-900/95 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md space-y-3">
   <!-- Active Player Header & Timer Status -->
   <div class="flex items-center justify-between gap-3">
-    <div class="flex items-center gap-2 min-w-0">
-      <div
-        class="w-4 h-4 rounded-full flex-shrink-0 shadow"
-        style="background-color: {activeColor?.hex ?? '#64748b'}"
-      ></div>
-      <div class="truncate">
-        <span class="text-xs text-slate-400 font-medium">Giliran: </span>
-        <strong class="text-sm font-bold text-white">{activePlayer?.name ?? 'Menunggu'}</strong>
+    <div class="flex items-center gap-2.5 min-w-0">
+      <!-- Kelap-kelip Active Player Beacon Dot -->
+      <span class="relative flex h-3.5 w-3.5 flex-shrink-0">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background-color: {activeColor?.hex ?? '#10b981'}"></span>
+        <span class="relative inline-flex rounded-full h-3.5 w-3.5 shadow-sm" style="background-color: {activeColor?.hex ?? '#10b981'}"></span>
+      </span>
+
+      <div class="truncate flex items-center gap-1.5">
+        <span class="text-xs text-slate-400 font-medium">Giliran:</span>
+        <strong class="text-sm font-black text-white">{activePlayer?.name ?? 'Menunggu'}</strong>
         {#if isMyTurn}
-          <span class="ml-1 text-[11px] font-extrabold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
-            (Kamu)
+          <span class="text-[10px] font-extrabold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+            Kamu
           </span>
         {/if}
+      </div>
+
+      <!-- Kelap-kelip status badge -->
+      <div class="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black tracking-wide animate-pulse">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span>AKTIF</span>
       </div>
     </div>
 
@@ -92,30 +109,53 @@
 
   <!-- Main Turn Interaction Area -->
   {#if isMyTurn}
-    {#if gameState === 'WAITING_FOR_ROLL'}
-      <!-- Interactive Math Input & Calculation -->
+    {#if gameState !== 'WAITING_FOR_MOVE' && !currentChallenge}
+      <!-- STEP 1: Tombol Roll Dadu Dulu (Jangan langsung beri soal) -->
+      <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-3">
+        <p class="text-xs text-slate-300 font-medium">
+          Sekarang giliranmu! Silakan lempar dadu untuk mengacak angka di layar.
+        </p>
+        <button
+          type="button"
+          onclick={onSpin}
+          class="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black text-sm uppercase tracking-wider rounded-xl shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2"
+        >
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="4" />
+            <path d="M8 8h.01" />
+            <path d="M12 12h.01" />
+            <path d="M16 16h.01" />
+            <path d="M16 8h.01" />
+            <path d="M8 16h.01" />
+          </svg>
+          <span>Roll Dadu Sekarang</span>
+        </button>
+      </div>
+
+    {:else if gameState !== 'WAITING_FOR_MOVE' && currentChallenge}
+      <!-- STEP 2: Soal Muncul Setelah Roll Dadu -->
       <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
         <div class="flex items-center justify-between text-xs">
           <span class="text-slate-400 font-semibold uppercase tracking-wider">
             Tentukan Angka Kalkulasimu
           </span>
-          <span class="text-[11px] text-slate-500">
-            Angka di layar: <strong class="text-indigo-400 font-mono">{currentChallenge?.screenNumber ?? 0}</strong>
+          <span class="text-[11px] text-slate-400 font-mono">
+            Rentang layar: -20 s.d. 20
           </span>
         </div>
 
         <!-- Equation Visual with Input -->
         <div class="flex items-center justify-center gap-2 font-mono text-lg font-black text-white py-1">
           <span class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-indigo-400">
-            {currentChallenge?.screenNumber ?? 0}
+            {currentChallenge.screenNumber}
           </span>
           <span class="text-xl text-amber-400">
-            {currentChallenge?.op ?? '+'}
+            {currentChallenge.op}
           </span>
           <input
             type="number"
             bind:value={userNumberInput}
-            placeholder="Angka kamu"
+            placeholder="-20 s.d. 20"
             class="w-32 px-3 py-1.5 bg-slate-900 border border-indigo-500/50 rounded-lg text-center text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
             onkeydown={(e) => {
               if (e.key === 'Enter') handleSubmitRoll();
@@ -160,16 +200,14 @@
           class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition active:scale-[0.98] flex items-center justify-center gap-2"
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="18" height="18" x="3" y="3" rx="4" />
-            <path d="M8 8h.01" />
-            <path d="M12 12h.01" />
-            <path d="M16 16h.01" />
+            <polyline points="20 6 9 17 4 12" />
           </svg>
           <span>Hitung & Lempar Dadu</span>
         </button>
       </div>
+
     {:else if gameState === 'WAITING_FOR_MOVE'}
-      <!-- Inline Roll Result (Non-blocking: No popup) -->
+      <!-- STEP 3: Hasil Kalkulasi Non-blocking & Instruksi Memilih Bidak -->
       <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5">
         <div class="flex items-center justify-between text-xs border-b border-slate-800/80 pb-2">
           <span class="text-slate-400 font-semibold uppercase tracking-wider">Hasil Dadu Matematika</span>
@@ -209,12 +247,15 @@
         </div>
       </div>
     {/if}
+
   {:else}
     <!-- Opponent Turn View -->
     <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-1">
       <div class="text-xs text-slate-300 font-medium">
-        {#if gameState === 'WAITING_FOR_ROLL'}
-          Menunggu <strong>{activePlayer?.name ?? 'pemain'}</strong> menentukan angka kalkulasi...
+        {#if !currentChallenge && gameState !== 'WAITING_FOR_MOVE'}
+          Menunggu <strong>{activePlayer?.name ?? 'pemain'}</strong> melempar dadu...
+        {:else if currentChallenge && gameState !== 'WAITING_FOR_MOVE'}
+          <strong>{activePlayer?.name ?? 'Pemain'}</strong> sedang menentukan angka kalkulasi...
         {:else if gameState === 'WAITING_FOR_MOVE'}
           <strong>{activePlayer?.name ?? 'Pemain'}</strong> menghasilkan {currentRoll?.steps ?? 0} langkah ({currentRoll?.direction === 'FORWARD' ? 'Maju' : 'Mundur'}). Sedang memilih bidak...
         {/if}

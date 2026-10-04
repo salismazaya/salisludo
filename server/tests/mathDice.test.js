@@ -54,13 +54,13 @@ describe('MathDice calculation rules', () => {
     expect(roll2.extraTurn).toBe(true);
   });
 
-  it('generates random equation with bounds -100 to 100', () => {
+  it('generates random equation with bounds -20 to 20', () => {
     for (let i = 0; i < 50; i++) {
       const roll = rollMathDice();
-      expect(roll.a).toBeGreaterThanOrEqual(-100);
-      expect(roll.a).toBeLessThanOrEqual(100);
-      expect(roll.b).toBeGreaterThanOrEqual(-100);
-      expect(roll.b).toBeLessThanOrEqual(100);
+      expect(roll.a).toBeGreaterThanOrEqual(-20);
+      expect(roll.a).toBeLessThanOrEqual(20);
+      expect(roll.b).toBeGreaterThanOrEqual(-20);
+      expect(roll.b).toBeLessThanOrEqual(20);
       expect(['+', '-']).toContain(roll.op);
       const expectedRaw = roll.op === '+' ? roll.a + roll.b : roll.a - roll.b;
       expect(roll.raw).toBe(expectedRaw);

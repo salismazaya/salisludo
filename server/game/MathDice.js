@@ -14,7 +14,7 @@ export function calculateDice(raw) {
 }
 
 export function generateChallenge() {
-  const screenNumber = Math.floor(Math.random() * 201) - 100; // -100 to 100
+  const screenNumber = Math.floor(Math.random() * 41) - 20; // -20 to 20
   const op = Math.random() < 0.5 ? '+' : '-';
   return { screenNumber, op };
 }
@@ -37,7 +37,7 @@ export function calculateRollWithInput({ screenNumber, op, userInput }) {
 
 export function rollMathDice() {
   const challenge = generateChallenge();
-  const randomInput = Math.floor(Math.random() * 201) - 100;
+  const randomInput = Math.floor(Math.random() * 41) - 20;
   return calculateRollWithInput({
     screenNumber: challenge.screenNumber,
     op: challenge.op,

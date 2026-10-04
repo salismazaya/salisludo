@@ -68,7 +68,7 @@ function startTurnTimer(room) {
       io.to(room.code).emit('turn_timeout', {
         nextPlayer: room.game.currentTurnPlayer,
         currentTimer: room.game.currentTurnTimer,
-        currentChallenge: room.game.currentChallenge
+        currentChallenge: null
       });
       startTurnTimer(room);
     }
@@ -178,13 +178,38 @@ io.on('connection', (socket) => {
         tokens: res.room.game.tokens,
         activePlayer: res.room.game.currentTurnPlayer,
         currentTimer: res.room.game.currentTurnTimer,
-        currentChallenge: res.room.game.currentChallenge
+        currentChallenge: null
       });
       startTurnTimer(res.room);
       callback({ success: true });
     } catch (err) {
       console.error('Error in start_game:', err);
       callback({ success: false, error: 'Gagal memulai permainan' });
+    }
+  });
+
+  socket.on('spin_dice', ({ code }, callback) => {
+    try {
+      const room = roomManager.rooms.get((code || '').toUpperCase());
+      if (!room || !room.game) return callback?.({ error: 'Permainan tidak ditemukan!' });
+
+      const activeId = room.game.currentTurnPlayer.id;
+      const callerId = socket.data.sessionId || socket.id;
+
+      if (activeId !== callerId) {
+        return callback?.({ error: 'Bukan giliranmu untuk roll dadu!' });
+      }
+
+      const challenge = room.game.spinChallenge(callerId);
+      io.to(code).emit('challenge_ready', {
+        activePlayerId: activeId,
+        currentChallenge: challenge
+      });
+
+      callback?.({ success: true, challenge });
+    } catch (err) {
+      console.error('Error in spin_dice:', err);
+      callback?.({ error: err.message || 'Gagal memutar dadu' });
     }
   });
 
@@ -196,18 +221,27 @@ io.on('connection', (socket) => {
       const activeId = room.game.currentTurnPlayer.id;
       const callerId = socket.data.sessionId || socket.id;
 
-      if (activeId !== callerId || room.game.state !== 'WAITING_FOR_ROLL') {
+      if (activeId !== callerId) {
         return callback({ error: 'Bukan giliranmu untuk melempar!' });
+      }
+
+      // If player rolled before spinChallenge, spin now automatically
+      let challenge = room.game.currentChallenge;
+      if (!challenge) {
+        challenge = room.game.spinChallenge(callerId);
+        io.to(code).emit('challenge_ready', {
+          activePlayerId: activeId,
+          currentChallenge: challenge
+        });
       }
 
       // Stop turn timer immediately so player can choose pawn at their own pace
       roomManager.stopTimer(room.code);
       room.timeLeft = null;
 
-      const challenge = room.game.currentChallenge || { screenNumber: 0, op: '+' };
       const safeInput = inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
         ? Math.round(Number(inputNumber))
-        : Math.floor(Math.random() * 201) - 100;
+        : Math.floor(Math.random() * 41) - 20;
 
       const roll = calculateRollWithInput({
         screenNumber: challenge.screenNumber,
@@ -246,7 +280,7 @@ io.on('connection', (socket) => {
           io.to(code).emit('turn_passed', {
             nextPlayer: room.game.currentTurnPlayer,
             currentTimer: room.game.currentTurnTimer,
-            currentChallenge: room.game.currentChallenge
+            currentChallenge: null
           });
           startTurnTimer(room);
         }, 2000);
