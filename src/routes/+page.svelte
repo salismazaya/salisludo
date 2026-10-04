@@ -29,6 +29,41 @@
   let showLeaderboard = $state(false);
   let leaderboardData = $state([]);
   let soundEnabled = $state(true);
+  let isRestoringSession = $state(false);
+
+  function attemptRestoreSession() {
+    const savedRoomCode = localStorage.getItem('ludo_math_room_code');
+    const savedName = localStorage.getItem('ludo_math_player_name');
+    const currentSessionId = localStorage.getItem('ludo_math_session_id') || sessionId;
+
+    if (savedRoomCode && savedName && socket) {
+      isRestoringSession = true;
+      socket.emit('join_room', { code: savedRoomCode, name: savedName, sessionId: currentSessionId }, (res) => {
+        isRestoringSession = false;
+        if (res && res.success) {
+          currentRoom = res.room;
+          myPlayer = res.player;
+          if (res.gameStarted) {
+            gameView = 'PLAYING';
+            tokens = res.tokens || {};
+            activePlayer = res.activePlayer;
+            totalTimer = res.currentTimer || 10;
+            timeLeft = res.timeLeft ?? 10;
+            gameState = res.gameState || 'WAITING_FOR_ROLL';
+            currentRoll = res.currentRoll || null;
+            validTokenIds = res.validTokenIds || [];
+            showDiceModal = !!currentRoll;
+            winners = res.winners || [];
+          } else {
+            gameView = 'LOBBY';
+          }
+        } else {
+          // If room expired or invalid, clear stale room code
+          localStorage.removeItem('ludo_math_room_code');
+        }
+      });
+    }
+  }
 
   onMount(() => {
     // 1. Session Persistence Setup
@@ -42,10 +77,13 @@
     const savedName = localStorage.getItem('ludo_math_player_name');
     if (savedName) playerName = savedName;
 
-    const savedRoomCode = localStorage.getItem('ludo_math_room_code');
-
     socket = getSocket();
     if (!socket) return;
+
+    socket.on('connect', () => {
+      // Re-trigger session restore on socket connect / reconnect
+      attemptRestoreSession();
+    });
 
     socket.on('room_updated', (room) => {
       currentRoom = room;
@@ -130,31 +168,9 @@
       currentRoom = room;
     });
 
-    // 2. Reconnect & restore session automatically on page refresh
-    if (savedRoomCode && savedName) {
-      socket.emit('join_room', { code: savedRoomCode, name: savedName, sessionId }, (res) => {
-        if (res && res.success) {
-          currentRoom = res.room;
-          myPlayer = res.player;
-          if (res.gameStarted) {
-            gameView = 'PLAYING';
-            tokens = res.tokens || {};
-            activePlayer = res.activePlayer;
-            totalTimer = res.currentTimer || 10;
-            timeLeft = res.timeLeft ?? 10;
-            gameState = res.gameState || 'WAITING_FOR_ROLL';
-            currentRoll = res.currentRoll || null;
-            validTokenIds = res.validTokenIds || [];
-            showDiceModal = !!currentRoll;
-            winners = res.winners || [];
-          } else {
-            gameView = 'LOBBY';
-          }
-        } else {
-          // If room no longer exists on server, clear stale room code
-          localStorage.removeItem('ludo_math_room_code');
-        }
-      });
+    // If socket is already connected when onMount runs, restore immediately
+    if (socket.connected) {
+      attemptRestoreSession();
     }
   });
 
@@ -285,7 +301,13 @@
 
   <!-- Body Content -->
   <div class="flex-1 flex flex-col items-center justify-center w-full max-w-5xl mx-auto space-y-4">
-    {#if gameView === 'LOBBY'}
+    {#if isRestoringSession}
+      <div class="p-8 text-center text-slate-400 bg-slate-900 border border-slate-800 rounded-3xl space-y-3 shadow-xl">
+        <div class="text-3xl animate-spin inline-block">🎲</div>
+        <p class="font-bold text-white text-base">Menghubungkan kembali ke kamar...</p>
+        <p class="text-xs text-slate-500">Memulihkan sesi permainanmu</p>
+      </div>
+    {:else if gameView === 'LOBBY'}
       <Lobby
         bind:playerName
         room={currentRoom}

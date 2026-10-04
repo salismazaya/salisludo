@@ -277,7 +277,7 @@
             <div class="flex items-center gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl">
               <div
                 class="w-4 h-4 rounded-full shadow-md flex-shrink-0"
-                style="background-color: {COLOR_CONFIG[p.color].hex}"
+                style="background-color: {COLOR_CONFIG[p.color]?.hex || '#6366f1'}"
               ></div>
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-bold text-white truncate flex items-center gap-1.5">
@@ -286,7 +286,7 @@
                     <span class="text-[10px] text-rose-400 font-normal">(Terputus)</span>
                   {/if}
                 </div>
-                <div class="text-[10px] text-slate-500">Warna {COLOR_CONFIG[p.color].name}</div>
+                <div class="text-[10px] text-slate-500">Warna {COLOR_CONFIG[p.color]?.name || p.color || 'Pemain'}</div>
               </div>
               {#if p.isHost}
                 <span class="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded-md flex-shrink-0">

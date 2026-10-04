@@ -2,9 +2,30 @@ import { LudoGame } from './LudoEngine.js';
 import { rollMathDice } from './MathDice.js';
 import { PLAYER_COLORS } from './Board6.js';
 
+export function toPublicRoom(room) {
+  if (!room) return null;
+  return {
+    code: room.code,
+    hostName: room.hostName,
+    defaultTimer: room.defaultTimer,
+    maxPlayers: room.maxPlayers,
+    status: room.status,
+    players: room.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      isHost: p.isHost,
+      connected: p.connected
+    })),
+    timeLeft: room.timeLeft
+  };
+}
+
 export class RoomManager {
   constructor() {
     this.rooms = new Map();
+    this.cleanupTimeouts = new Map();
+    this.timerIntervals = new Map();
   }
 
   createRoom({ hostName, defaultTimer = 10, maxPlayers = 6 }) {
@@ -17,7 +38,6 @@ export class RoomManager {
       status: 'LOBBY', // 'LOBBY' | 'PLAYING' | 'FINISHED'
       players: [],
       game: null,
-      timerInterval: null,
       timeLeft: Number(defaultTimer),
       createdAt: Date.now()
     };
@@ -42,6 +62,13 @@ export class RoomManager {
       existingPlayer.id = playerId; // sync sessionId
       existingPlayer.connected = true;
       existingPlayer.name = trimmedName; // update display name if adjusted
+
+      // If there was a pending room cleanup, cancel it because player came back!
+      if (this.cleanupTimeouts.has(cleanCode)) {
+        clearTimeout(this.cleanupTimeouts.get(cleanCode));
+        this.cleanupTimeouts.delete(cleanCode);
+      }
+
       return { room, player: existingPlayer, isRejoin: true };
     }
 
@@ -97,15 +124,16 @@ export class RoomManager {
         // Check if all players are disconnected
         const allDisconnected = room.players.every(p => !p.connected);
         if (allDisconnected) {
-          // Keep room for 15 minutes grace period before cleanup
-          if (!room.cleanupTimeout) {
-            room.cleanupTimeout = setTimeout(() => {
+          if (!this.cleanupTimeouts.has(code)) {
+            const timeout = setTimeout(() => {
               const currentRoom = this.rooms.get(code);
               if (currentRoom && currentRoom.players.every(p => !p.connected)) {
-                if (currentRoom.timerInterval) clearInterval(currentRoom.timerInterval);
+                this.stopTimer(code);
                 this.rooms.delete(code);
               }
+              this.cleanupTimeouts.delete(code);
             }, 15 * 60 * 1000);
+            this.cleanupTimeouts.set(code, timeout);
           }
         }
         return { code, room, player };
@@ -114,14 +142,29 @@ export class RoomManager {
     return null;
   }
 
+  stopTimer(code) {
+    if (this.timerIntervals.has(code)) {
+      clearInterval(this.timerIntervals.get(code));
+      this.timerIntervals.delete(code);
+    }
+  }
+
+  setTimerInterval(code, interval) {
+    this.stopTimer(code);
+    this.timerIntervals.set(code, interval);
+  }
+
   leave(sessionId) {
     for (const [code, room] of this.rooms.entries()) {
       const idx = room.players.findIndex(p => p.id === sessionId);
       if (idx !== -1) {
         room.players.splice(idx, 1);
         if (room.players.length === 0) {
-          if (room.timerInterval) clearInterval(room.timerInterval);
-          if (room.cleanupTimeout) clearTimeout(room.cleanupTimeout);
+          this.stopTimer(code);
+          if (this.cleanupTimeouts.has(code)) {
+            clearTimeout(this.cleanupTimeouts.get(code));
+            this.cleanupTimeouts.delete(code);
+          }
           this.rooms.delete(code);
         }
         return { code, room };
