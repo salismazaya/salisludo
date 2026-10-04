@@ -29,7 +29,16 @@ const io = new Server(server, {
   cors: { origin: '*' }
 });
 
-const PORT = process.env.PORT || 3333;
+// Auto-load .env if available
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile();
+  } catch (e) {
+    // .env not present or optional
+  }
+}
+
+const PORT = Number(process.env.PORT) || 3333;
 const HOST = process.env.HOST || '0.0.0.0';
 const db = createDb(process.env.DB_PATH || 'ludo.db');
 const roomManager = new RoomManager();

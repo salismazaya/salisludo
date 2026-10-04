@@ -1,0 +1,16 @@
+node_modules
+.svelte-kit
+build
+ludo.db*
+*.db*
+*.sqlite*
+.git
+.github
+tests
+coverage
+.env
+.env.*
+!.env.example
+npm-debug.log*
+Dockerfile*
+.dockerignore
