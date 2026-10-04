@@ -9,7 +9,11 @@ export function createDb(dbPath = 'ludo.db') {
   }
   const db = new Database(dbPath);
 
-  db.pragma('journal_mode = WAL');
+  try {
+    db.pragma('journal_mode = DELETE');
+  } catch (e) {
+    // fallback
+  }
   db.pragma('foreign_keys = ON');
 
   db.exec(`

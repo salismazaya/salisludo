@@ -1,3 +1,6 @@
+console.log('🚀 [STARTUP] SalisLudo server starting...');
+console.log(`🚀 [STARTUP] Node: ${process.version} | OS: ${process.platform} ${process.arch}`);
+
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
