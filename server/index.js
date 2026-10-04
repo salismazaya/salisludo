@@ -21,7 +21,7 @@ const io = new Server(server, {
   cors: { origin: '*' }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3333;
 const HOST = process.env.HOST || '0.0.0.0';
 const db = createDb(process.env.DB_PATH || 'ludo.db');
 const roomManager = new RoomManager();
