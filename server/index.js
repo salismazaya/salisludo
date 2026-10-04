@@ -189,8 +189,11 @@ io.on('connection', socket => {
   });
 });
 
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 // Serve SvelteKit SSR build in production or placeholder in dev
-const buildHandlerPath = path.resolve('./build/handler.js');
+const buildHandlerPath = path.resolve(__dirname, '../build/handler.js');
 if (fs.existsSync(buildHandlerPath)) {
   const { handler } = await import(buildHandlerPath);
   app.use(handler);
