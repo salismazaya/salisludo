@@ -438,7 +438,7 @@
   </header>
 
   <!-- Body Content -->
-  <div class="flex-1 flex flex-col items-center justify-center w-full max-w-5xl mx-auto space-y-4">
+  <div class="flex-1 flex flex-col items-center justify-center w-full max-w-7xl mx-auto space-y-4">
     {#if isRestoringSession}
       <div class="p-8 text-center text-black bg-white border-4 border-black shadow-[6px_6px_0px_#000] space-y-3">
         <div class="w-8 h-8 mx-auto animate-spin text-black">
@@ -461,41 +461,38 @@
         onShowLeaderboard={openLeaderboard}
       />
     {:else if gameView === 'PLAYING'}
-      {@const isInputting = activePlayer?.id === sessionId && gameState !== 'WAITING_FOR_MOVE' && !!currentChallenge}
+      <!-- Landscape & Desktop: Kiri Board (Besar & Jelas), Kanan Input (TurnHUD) -->
+      <div class="w-full flex flex-col md:flex-row landscape:flex-row items-center justify-center gap-3 lg:gap-6 flex-1 min-h-0">
+        <!-- SISI KIRI (LANDSCAPE / MD): Board Ludo (Besar & Jelas) -->
+        <div class="flex-1 w-full flex items-center justify-center min-w-0">
+          <div class="w-full max-w-[360px] sm:max-w-[440px] md:max-w-[540px] lg:max-w-[620px] max-h-[52vh] sm:max-h-[64vh] md:max-h-[82vh] landscape:max-h-[82vh] aspect-square flex items-center justify-center">
+            <BoardSvg
+              players={currentRoom?.players ?? []}
+              {tokens}
+              {validTokenIds}
+              activePlayerId={activePlayer?.id}
+              onTokenClick={handleSelectToken}
+            />
+          </div>
+        </div>
 
-      <!-- Turn HUD with Interactive Math Input & Non-blocking Result Display -->
-      <TurnHUD
-        {activePlayer}
-        myPlayerId={sessionId}
-        {timeLeft}
-        {totalTimer}
-        {gameState}
-        {validTokenIds}
-        {currentChallenge}
-        {currentRoll}
-        minRange={currentRoom?.minRange ?? -20}
-        maxRange={currentRoom?.maxRange ?? 20}
-        onSpin={handleSpinDice}
-        onRoll={handleRollDice}
-      />
-
-      <!-- Scalable SVG Board (15x15 Classic Grid) -->
-      <!-- Papan diperkecil saat input angka agar pas 1 layar tanpa perlu scroll -->
-      <div
-        class="w-full transition-all duration-300 flex flex-col items-center justify-center {isInputting ? 'max-w-[190px] sm:max-w-[240px] p-1.5 bg-white border-2 border-black shadow-[3px_3px_0px_#000]' : 'max-w-4xl p-2 sm:p-4 bg-white border-4 border-black shadow-[8px_8px_0px_#000]'}"
-      >
-        <BoardSvg
-          players={currentRoom?.players ?? []}
-          {tokens}
-          {validTokenIds}
-          activePlayerId={activePlayer?.id}
-          onTokenClick={handleSelectToken}
-        />
-        {#if isInputting}
-          <span class="text-[9px] font-black uppercase tracking-wider text-slate-500 pt-1 text-center">
-            Papan mini saat input (otomatis membesar)
-          </span>
-        {/if}
+        <!-- SISI KANAN (LANDSCAPE / MD): Panel Input & HUD Ramping -->
+        <div class="w-full max-w-sm sm:max-w-md md:w-[340px] lg:w-[380px] landscape:w-[310px] md:landscape:w-[350px] flex-shrink-0">
+          <TurnHUD
+            {activePlayer}
+            myPlayerId={sessionId}
+            {timeLeft}
+            {totalTimer}
+            {gameState}
+            {validTokenIds}
+            {currentChallenge}
+            {currentRoll}
+            minRange={currentRoom?.minRange ?? -20}
+            maxRange={currentRoom?.maxRange ?? 20}
+            onSpin={handleSpinDice}
+            onRoll={handleRollDice}
+          />
+        </div>
       </div>
     {:else if gameView === 'FINISHED'}
       <!-- Game Over / Winner Screen (Neobrutalism) -->

@@ -127,45 +127,45 @@
   }}
 />
 
-<div class="w-full max-w-xl mx-auto bg-white border-4 border-black p-3 sm:p-4 shadow-[6px_6px_0px_#000] space-y-2.5">
+<div class="w-full max-w-sm sm:max-w-md mx-auto bg-white border-3 sm:border-4 border-black p-2.5 sm:p-3 shadow-[4px_4px_0px_#000] space-y-2">
   <!-- Active Player Header & Timer Status -->
-  <div class="flex items-center justify-between gap-3 border-b-2 border-black pb-2.5">
-    <div class="flex items-center gap-2.5 min-w-0">
+  <div class="flex items-center justify-between gap-2 border-b-2 border-black pb-1.5">
+    <div class="flex items-center gap-2 min-w-0">
       <!-- Active Player Mark Dot -->
-      <span class="inline-block w-4 h-4 border-2 border-black shadow-[1px_1px_0px_#000]" style="background-color: {activeColor?.hex ?? '#10b981'}"></span>
+      <span class="inline-block w-3.5 h-3.5 border-2 border-black shadow-[1px_1px_0px_#000]" style="background-color: {activeColor?.hex ?? '#10b981'}"></span>
 
-      <div class="truncate flex items-center gap-1.5 text-black">
-        <span class="text-xs font-bold uppercase tracking-wider">Giliran:</span>
-        <strong class="text-sm sm:text-base font-black uppercase">{activePlayer?.name ?? 'Menunggu'}</strong>
+      <div class="truncate flex items-center gap-1 text-black">
+        <span class="text-[11px] font-bold uppercase tracking-wider">Giliran:</span>
+        <strong class="text-xs sm:text-sm font-black uppercase">{activePlayer?.name ?? 'Menunggu'}</strong>
         {#if isMyTurn}
-          <span class="text-[10px] font-black uppercase text-black bg-[#FFE600] px-2 py-0.5 border-2 border-black shadow-[1px_1px_0px_#000]">
+          <span class="text-[9px] font-black uppercase text-black bg-[#FFE600] px-1.5 py-0.5 border border-black shadow-[1px_1px_0px_#000]">
             Kamu
           </span>
         {/if}
       </div>
 
       <!-- Active Indicator Badge -->
-      <div class="hidden sm:inline-block px-2 py-0.5 bg-[#4ADE80] border-2 border-black text-black text-[10px] font-black uppercase tracking-wider shadow-[1px_1px_0px_#000]">
+      <div class="hidden sm:inline-block px-1.5 py-0.5 bg-[#4ADE80] border border-black text-black text-[9px] font-black uppercase tracking-wider shadow-[1px_1px_0px_#000]">
         AKTIF
       </div>
     </div>
 
     <!-- Timer Countdown Badge -->
-    <div class="flex items-center gap-1.5 bg-[#FFE600] text-black px-3 py-1 border-2 border-black shadow-[2px_2px_0px_#000] flex-shrink-0">
-      <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <div class="flex items-center gap-1 bg-[#FFE600] text-black px-2.5 py-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] flex-shrink-0">
+      <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10" />
         <polyline points="12 6 12 12 16 14" />
       </svg>
       {#if !currentChallenge && gameState !== 'WAITING_FOR_MOVE'}
-        <span class="text-xs font-black uppercase font-mono">
+        <span class="text-[10px] font-black uppercase font-mono">
           Tunggu Roll
         </span>
       {:else if isTimerPaused}
-        <span class="text-xs font-black uppercase font-mono">
-          Timer Dijeda
+        <span class="text-[10px] font-black uppercase font-mono">
+          Dijeda
         </span>
       {:else}
-        <span class="font-mono font-black text-sm {timeLeft <= 2 ? 'text-red-600' : 'text-black'}">
+        <span class="font-mono font-black text-xs sm:text-sm {timeLeft <= 2 ? 'text-red-600' : 'text-black'}">
           {timeLeft}s
         </span>
       {/if}
@@ -173,7 +173,7 @@
   </div>
 
   <!-- Neobrutalist Progress Bar -->
-  <div class="w-full h-3 bg-slate-100 border-2 border-black overflow-hidden shadow-[2px_2px_0px_#000]">
+  <div class="w-full h-2 bg-slate-100 border border-black overflow-hidden shadow-[1px_1px_0px_#000]">
     <div
       class="h-full transition-all duration-300 {isTimerPaused ? 'bg-[#4ADE80]' : (timeLeft <= 2 ? 'bg-[#FF6B6B]' : 'bg-[#3B82F6]')}"
       style="width: {progressPercent}%;"
@@ -184,16 +184,16 @@
   {#if isMyTurn}
     {#if gameState !== 'WAITING_FOR_MOVE' && !currentChallenge}
       <!-- STEP 1: Tombol Roll Dadu Dulu (Timer belum berjalan) -->
-      <div class="p-4 bg-[#F8FAFC] border-2 border-black shadow-[3px_3px_0px_#000] text-center space-y-3">
-        <p class="text-xs sm:text-sm text-black font-bold">
-          Sekarang giliranmu! Timer belum berjalan. Silakan lempar dadu untuk memulai kalkulasi.
+      <div class="p-3 bg-[#F8FAFC] border-2 border-black shadow-[2px_2px_0px_#000] text-center space-y-2">
+        <p class="text-xs text-black font-bold">
+          Giliranmu! Lempar dadu untuk memulai kalkulasi soal.
         </p>
         <button
           type="button"
           onclick={onSpin}
-          class="w-full py-3.5 px-4 bg-[#FFE600] hover:bg-[#FDD835] active:translate-x-0.5 active:translate-y-0.5 text-black font-black text-sm uppercase tracking-wider border-3 border-black shadow-[4px_4px_0px_#000] transition flex items-center justify-center gap-2"
+          class="w-full py-2.5 px-3 bg-[#FFE600] hover:bg-[#FDD835] active:translate-x-0.5 active:translate-y-0.5 text-black font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-black shadow-[3px_3px_0px_#000] transition flex items-center justify-center gap-1.5 cursor-pointer"
         >
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <rect width="18" height="18" x="3" y="3" rx="0" />
             <path d="M8 8h.01" />
             <path d="M12 12h.01" />
@@ -206,48 +206,48 @@
       </div>
 
     {:else if gameState !== 'WAITING_FOR_MOVE' && currentChallenge}
-      <!-- STEP 2: Soal Muncul Setelah Roll Dadu (Keypad Custom 2 Baris, Tanpa Virtual Keyboard Native) -->
-      <div class="p-3 sm:p-4 bg-[#F8FAFC] border-2 border-black shadow-[3px_3px_0px_#000] space-y-2.5 text-black">
-        <div class="flex items-center justify-between text-xs font-black">
+      <!-- STEP 2: Soal Muncul Setelah Roll Dadu (Keypad Compact 2 Baris) -->
+      <div class="p-2 sm:p-2.5 bg-[#F8FAFC] border-2 border-black shadow-[2px_2px_0px_#000] space-y-1.5 text-black">
+        <div class="flex items-center justify-between text-[11px] font-black">
           <span class="uppercase tracking-wider">
-            Tentukan Angka Kalkulasimu
+            Tentukan Angka
           </span>
           <span class="font-mono text-slate-700">
             Rentang: {effectiveMin} s.d. {effectiveMax}
           </span>
         </div>
 
-        <!-- Equation Visual with Custom Display (No native mobile virtual keyboard) -->
-        <div class="flex items-center justify-center gap-2 font-mono text-xl sm:text-2xl font-black py-0.5">
-          <span class="px-3.5 py-1 bg-white border-2 border-black shadow-[2px_2px_0px_#000] text-black">
+        <!-- Equation Visual with Compact Display -->
+        <div class="flex items-center justify-center gap-1.5 font-mono text-lg sm:text-xl font-black py-0.5">
+          <span class="px-2.5 py-0.5 bg-white border-2 border-black shadow-[1.5px_1.5px_0px_#000] text-black">
             {currentChallenge.screenNumber}
           </span>
-          <span class="text-2xl text-black">
+          <span class="text-xl text-black">
             {currentChallenge.op}
           </span>
           <!-- Readonly Display Box replacing native input -->
           <div
-            class="min-w-[100px] sm:min-w-[130px] px-3 py-1 bg-white border-2 border-black shadow-[2px_2px_0px_#000] text-center text-black font-mono font-black text-xl sm:text-2xl select-none flex items-center justify-center min-h-[44px]"
+            class="min-w-[70px] sm:min-w-[85px] px-2 py-0.5 bg-white border-2 border-black shadow-[1.5px_1.5px_0px_#000] text-center text-black font-mono font-black text-lg sm:text-xl select-none flex items-center justify-center min-h-[34px]"
           >
             {#if userNumberInput !== ''}
               <span>{userNumberInput}</span>
             {:else}
-              <span class="text-slate-400 font-sans text-xs font-bold animate-pulse">Isi angka...</span>
+              <span class="text-slate-400 font-sans text-[11px] font-bold animate-pulse">Isi...</span>
             {/if}
           </div>
           <span class="text-black font-black">=</span>
           <span class="text-slate-600 text-sm font-sans font-bold">?</span>
         </div>
 
-        <!-- Custom On-screen Keypad (2 Baris) -->
-        <div class="w-full max-w-sm mx-auto space-y-1.5 select-none pt-0.5">
+        <!-- Compact On-screen Keypad (2 Baris) -->
+        <div class="w-full max-w-[280px] sm:max-w-[310px] mx-auto space-y-1 select-none pt-0.5">
           <!-- Baris 1: 1, 2, 3, 4, 5, Mines (-) -->
-          <div class="grid grid-cols-6 gap-1.5">
+          <div class="grid grid-cols-6 gap-1">
             {#each ['1', '2', '3', '4', '5'] as num}
               <button
                 type="button"
                 onclick={() => handleKeypadPress(num)}
-                class="h-10 sm:h-11 bg-white hover:bg-slate-100 active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] font-mono font-black text-base sm:text-lg text-black transition flex items-center justify-center cursor-pointer"
+                class="h-8 sm:h-8.5 bg-white hover:bg-slate-100 active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] font-mono font-black text-sm text-black transition flex items-center justify-center cursor-pointer"
               >
                 {num}
               </button>
@@ -256,7 +256,7 @@
             <button
               type="button"
               onclick={() => handleKeypadPress('-')}
-              class="h-10 sm:h-11 bg-[#FFE600] hover:bg-[#FDD835] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] font-mono font-black text-xl text-black transition flex items-center justify-center cursor-pointer"
+              class="h-8 sm:h-8.5 bg-[#FFE600] hover:bg-[#FDD835] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] font-mono font-black text-base text-black transition flex items-center justify-center cursor-pointer"
               title="Tanda Minus (-)"
             >
               −
@@ -264,12 +264,12 @@
           </div>
 
           <!-- Baris 2: 6, 7, 8, 9, 0, Backspace (⌫) -->
-          <div class="grid grid-cols-6 gap-1.5">
+          <div class="grid grid-cols-6 gap-1">
             {#each ['6', '7', '8', '9', '0'] as num}
               <button
                 type="button"
                 onclick={() => handleKeypadPress(num)}
-                class="h-10 sm:h-11 bg-white hover:bg-slate-100 active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] font-mono font-black text-base sm:text-lg text-black transition flex items-center justify-center cursor-pointer"
+                class="h-8 sm:h-8.5 bg-white hover:bg-slate-100 active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] font-mono font-black text-sm text-black transition flex items-center justify-center cursor-pointer"
               >
                 {num}
               </button>
@@ -278,10 +278,10 @@
             <button
               type="button"
               onclick={() => handleKeypadPress('BACKSPACE')}
-              class="h-10 sm:h-11 bg-[#E2E8F0] hover:bg-[#CBD5E1] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] font-mono font-black text-black transition flex items-center justify-center cursor-pointer"
+              class="h-8 sm:h-8.5 bg-[#E2E8F0] hover:bg-[#CBD5E1] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] font-mono font-black text-black transition flex items-center justify-center cursor-pointer"
               title="Hapus Satu Karakter"
             >
-              <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
                 <line x1="18" y1="9" x2="12" y2="15" />
                 <line x1="12" y1="9" x2="18" y2="15" />
@@ -291,71 +291,67 @@
         </div>
 
         <!-- Action Buttons: Hitung & Tombol Acak Random -->
-        <div class="grid grid-cols-2 gap-2 pt-0.5 max-w-sm mx-auto">
+        <div class="grid grid-cols-2 gap-1.5 pt-0.5 max-w-[280px] sm:max-w-[310px] mx-auto">
           <!-- Submit Roll Button -->
           <button
             type="button"
             onclick={handleSubmitRoll}
-            class="py-2.5 px-3 bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 text-black font-black text-xs uppercase tracking-wider border-2 border-black shadow-[3px_3px_0px_#000] transition flex items-center justify-center gap-1.5 cursor-pointer"
+            class="py-1.5 sm:py-2 px-2 bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 text-black font-black text-[11px] sm:text-xs uppercase tracking-wider border-2 border-black shadow-[2px_2px_0px_#000] transition flex items-center justify-center gap-1 cursor-pointer"
           >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
-            <span>Hitung Dadu</span>
+            <span>Hitung</span>
           </button>
 
           <!-- Tombol Acak Random -->
           <button
             type="button"
             onclick={handleRandomPick}
-            class="py-2.5 px-3 bg-[#FF6B6B] hover:bg-[#EE5253] active:translate-x-0.5 active:translate-y-0.5 text-black font-black text-xs uppercase tracking-wider border-2 border-black shadow-[3px_3px_0px_#000] transition flex items-center justify-center gap-1.5 cursor-pointer"
+            class="py-1.5 sm:py-2 px-2 bg-[#FF6B6B] hover:bg-[#EE5253] active:translate-x-0.5 active:translate-y-0.5 text-black font-black text-[11px] sm:text-xs uppercase tracking-wider border-2 border-black shadow-[2px_2px_0px_#000] transition flex items-center justify-center gap-1 cursor-pointer"
           >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
-            <span>Acak Angka</span>
+            <span>Acak</span>
           </button>
         </div>
-
-        <p class="text-[10px] text-slate-500 text-center font-bold">
-          Tip: Tekan tombol atau gunakan keyboard fisik (0-9, -, Backspace, Enter).
-        </p>
       </div>
 
     {:else if gameState === 'WAITING_FOR_MOVE'}
       <!-- STEP 3: TAMPILAN DADU SUPER JELAS (+1, +2, -1, -6, +6) & WAJIB KLIK BIDAK DI PAPAN -->
-      <div class="space-y-3">
+      <div class="space-y-2">
         <!-- Kartu Dadu Jelas Neobrutalist -->
-        <div class="p-3.5 bg-white border-2 border-black shadow-[3px_3px_0px_#000] space-y-3">
-          <div class="flex items-center justify-between text-xs border-b-2 border-black pb-1.5 font-bold text-black">
-            <span class="uppercase tracking-wider">Kalkulasi Matematika</span>
+        <div class="p-2.5 bg-white border-2 border-black shadow-[2px_2px_0px_#000] space-y-2">
+          <div class="flex items-center justify-between text-[11px] border-b-2 border-black pb-1 font-bold text-black">
+            <span class="uppercase tracking-wider">Kalkulasi</span>
             <span class="font-mono font-black text-xs">
               ({currentRoll?.a ?? 0}) {currentRoll?.op ?? '+'} ({currentRoll?.b ?? 0}) = {currentRoll?.raw ?? 0}
             </span>
           </div>
 
           <!-- Highlight Besar Dadu Hasil -->
-          <div class="flex items-center justify-between p-3 border-2 border-black shadow-[2px_2px_0px_#000] {diceDisplay?.badgeBg}">
-            <div class="flex items-center gap-3">
+          <div class="flex items-center justify-between p-2 border-2 border-black shadow-[1.5px_1.5px_0px_#000] {diceDisplay?.badgeBg}">
+            <div class="flex items-center gap-2.5">
               <!-- Big Dice Number Display (+1, +2, -1, -6, +6) -->
-              <div class="w-14 h-14 bg-white border-2 border-black flex flex-col items-center justify-center shadow-[2px_2px_0px_#000] flex-shrink-0">
-                <span class="text-2xl font-black text-black tracking-tight">{diceDisplay?.signText}</span>
+              <div class="w-11 h-11 bg-white border-2 border-black flex flex-col items-center justify-center shadow-[1.5px_1.5px_0px_#000] flex-shrink-0">
+                <span class="text-xl font-black text-black tracking-tight">{diceDisplay?.signText}</span>
               </div>
 
               <div>
-                <div class="text-base font-black tracking-wide flex items-center gap-1.5 text-black">
+                <div class="text-sm font-black tracking-wide flex items-center gap-1 text-black">
                   {#if currentRoll?.direction === 'FORWARD'}
-                    <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="18 15 12 9 6 15" />
                     </svg>
                   {:else if currentRoll?.direction === 'BACKWARD'}
-                    <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="6 9 12 15 18 9" />
                     </svg>
                   {/if}
                   <span>{diceDisplay?.label}</span>
                 </div>
-                <div class="text-xs font-bold text-black">
+                <div class="text-[11px] font-bold text-black">
                   {diceDisplay?.sub}
                 </div>
               </div>
@@ -363,16 +359,16 @@
 
             {#if currentRoll?.steps === 6}
               <div class="text-right">
-                <span class="text-[10px] font-black uppercase tracking-wider text-black bg-[#FFE600] px-2 py-1 border-2 border-black shadow-[1px_1px_0px_#000]">
-                  Bonus Giliran (3 Detik)!
+                <span class="text-[9px] font-black uppercase tracking-wider text-black bg-[#FFE600] px-1.5 py-0.5 border border-black shadow-[1px_1px_0px_#000]">
+                  Extra Turn!
                 </span>
               </div>
             {/if}
           </div>
 
           <!-- Clean Direct Board Pick Hint -->
-          <div class="pt-1 flex items-center justify-center gap-2 text-xs font-black uppercase text-black bg-[#FFE600] py-1.5 border-2 border-black shadow-[2px_2px_0px_#000]">
-            <span>Silakan klik langsung bidakmu di papan untuk melangkah</span>
+          <div class="pt-0.5 flex items-center justify-center gap-1 text-[11px] font-black uppercase text-black bg-[#FFE600] py-1 border-2 border-black shadow-[1.5px_1.5px_0px_#000]">
+            <span>Klik bidakmu di papan</span>
           </div>
         </div>
       </div>
@@ -380,25 +376,25 @@
 
   {:else}
     <!-- Opponent Turn View -->
-    <div class="p-3.5 bg-white border-2 border-black shadow-[3px_3px_0px_#000] space-y-2 text-center text-black">
+    <div class="p-2.5 bg-white border-2 border-black shadow-[2px_2px_0px_#000] space-y-1.5 text-center text-black">
       <div class="text-xs font-bold">
         {#if !currentChallenge && gameState !== 'WAITING_FOR_MOVE'}
           Menunggu <strong>{activePlayer?.name ?? 'pemain'}</strong> melempar dadu...
         {:else if currentChallenge && gameState !== 'WAITING_FOR_MOVE'}
-          <strong>{activePlayer?.name ?? 'Pemain'}</strong> sedang menentukan angka...
+          <strong>{activePlayer?.name ?? 'Pemain'}</strong> sedang input angka...
         {:else if gameState === 'WAITING_FOR_MOVE'}
           <strong>{activePlayer?.name ?? 'Pemain'}</strong> sedang memilih bidak di papan...
         {/if}
       </div>
 
       {#if gameState === 'WAITING_FOR_MOVE' && diceDisplay}
-        <div class="inline-flex items-center gap-3 px-4 py-2 border-2 border-black shadow-[2px_2px_0px_#000] {diceDisplay.badgeBg}">
-          <span class="text-xl font-black font-mono">{diceDisplay.signText}</span>
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] {diceDisplay.badgeBg}">
+          <span class="text-lg font-black font-mono">{diceDisplay.signText}</span>
           <span class="text-xs font-black uppercase">{diceDisplay.label} {diceDisplay.sub}</span>
         </div>
       {:else if currentChallenge}
         <div class="text-[11px] text-slate-700 font-mono font-bold">
-          Angka di layar: ({currentChallenge.screenNumber}) {currentChallenge.op} [ ? ]
+          Soal layar: ({currentChallenge.screenNumber}) {currentChallenge.op} [ ? ]
         </div>
       {/if}
     </div>

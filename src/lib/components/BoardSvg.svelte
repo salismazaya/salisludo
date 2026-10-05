@@ -122,10 +122,10 @@
   });
 </script>
 
-<div class="w-full max-w-[760px] aspect-square mx-auto p-1 sm:p-3 flex items-center justify-center">
+<div class="w-full h-full aspect-square mx-auto flex items-center justify-center">
   <svg
     viewBox="0 0 600 600"
-    class="w-full h-full select-none border-4 border-black shadow-[6px_6px_0px_#000] bg-white"
+    class="w-full h-full select-none border-3 sm:border-4 border-black shadow-[4px_4px_0px_#000] sm:shadow-[6px_6px_0px_#000] bg-white"
   >
     <defs>
       <!-- Gradients for 3D Pawn Tokens -->
