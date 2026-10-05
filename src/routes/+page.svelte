@@ -231,13 +231,13 @@
     };
   });
 
-  async function handleCreateRoom({ name, timer, maxPlayers }, callback) {
+  async function handleCreateRoom({ name, timer, maxPlayers, minRange, maxRange }, callback) {
     localStorage.setItem('ludo_math_player_name', name);
     try {
       const res = await fetch('/api/rooms/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, timer, maxPlayers, sessionId })
+        body: JSON.stringify({ name, timer, maxPlayers, minRange, maxRange, sessionId })
       }).then((r) => r.json());
 
       if (res && res.success) {
@@ -461,6 +461,8 @@
         onShowLeaderboard={openLeaderboard}
       />
     {:else if gameView === 'PLAYING'}
+      {@const isInputting = activePlayer?.id === sessionId && gameState !== 'WAITING_FOR_MOVE' && !!currentChallenge}
+
       <!-- Turn HUD with Interactive Math Input & Non-blocking Result Display -->
       <TurnHUD
         {activePlayer}
@@ -471,12 +473,17 @@
         {validTokenIds}
         {currentChallenge}
         {currentRoll}
+        minRange={currentRoom?.minRange ?? -20}
+        maxRange={currentRoom?.maxRange ?? 20}
         onSpin={handleSpinDice}
         onRoll={handleRollDice}
       />
 
       <!-- Scalable SVG Board (15x15 Classic Grid) -->
-      <div class="w-full max-w-4xl p-2 sm:p-4 bg-white border-4 border-black shadow-[8px_8px_0px_#000] flex justify-center items-center">
+      <!-- Papan diperkecil saat input angka agar pas 1 layar tanpa perlu scroll -->
+      <div
+        class="w-full transition-all duration-300 flex flex-col items-center justify-center {isInputting ? 'max-w-[190px] sm:max-w-[240px] p-1.5 bg-white border-2 border-black shadow-[3px_3px_0px_#000]' : 'max-w-4xl p-2 sm:p-4 bg-white border-4 border-black shadow-[8px_8px_0px_#000]'}"
+      >
         <BoardSvg
           players={currentRoom?.players ?? []}
           {tokens}
@@ -484,6 +491,11 @@
           activePlayerId={activePlayer?.id}
           onTokenClick={handleSelectToken}
         />
+        {#if isInputting}
+          <span class="text-[9px] font-black uppercase tracking-wider text-slate-500 pt-1 text-center">
+            Papan mini saat input (otomatis membesar)
+          </span>
+        {/if}
       </div>
     {:else if gameView === 'FINISHED'}
       <!-- Game Over / Winner Screen (Neobrutalism) -->

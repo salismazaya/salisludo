@@ -98,7 +98,9 @@ function startCountdownTimer(room) {
       // Jika kehabisan waktu saat memilih angka (WAITING_FOR_INPUT), server pilihkan angka random!
       if (room.game.state === 'WAITING_FOR_INPUT' && room.game.currentChallenge) {
         const challenge = room.game.currentChallenge;
-        const randomInput = Math.floor(Math.random() * 41) - 20; // -20..20
+        const minR = room.game?.minRange ?? room.minRange ?? -20;
+        const maxR = room.game?.maxRange ?? room.maxRange ?? 20;
+        const randomInput = Math.floor(Math.random() * (maxR - minR + 1)) + minR;
         const autoRoll = calculateRollWithInput({
           screenNumber: challenge.screenNumber,
           op: challenge.op,
@@ -192,14 +194,14 @@ app.get('/api/leaderboard', (c) => {
 
 app.post('/api/rooms/create', async (c) => {
   try {
-    const { name, timer, maxPlayers, sessionId } = await c.req.json().catch(() => ({}));
+    const { name, timer, maxPlayers, minRange, maxRange, sessionId } = await c.req.json().catch(() => ({}));
     if (!name || name.trim().length < 2) {
       return c.json({ success: false, error: 'Nama minimal 2 karakter!' }, 400);
     }
     const safeSessionId = sessionId || `sess_${Math.random().toString(36).substring(2, 9)}`;
     const dbPlayer = getOrCreatePlayer(db, name);
     const safeTimer = Math.min(30, Math.max(10, Number(timer) || 30));
-    const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers });
+    const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers, minRange, maxRange });
     const joinRes = roomManager.joinRoom({
       code: room.code,
       socketId: safeSessionId,
@@ -400,10 +402,12 @@ app.post('/api/rooms/roll', async (c) => {
     roomManager.stopTimer(room.code);
     room.timeLeft = null;
 
+    const minR = room.game?.minRange ?? room.minRange ?? -20;
+    const maxR = room.game?.maxRange ?? room.maxRange ?? 20;
     const safeInput =
       inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
         ? Math.round(Number(inputNumber))
-        : Math.floor(Math.random() * 41) - 20;
+        : Math.floor(Math.random() * (maxR - minR + 1)) + minR;
 
     const roll = calculateRollWithInput({
       screenNumber: challenge.screenNumber,
@@ -574,7 +578,7 @@ app.get(
 
         if (evName === 'create_room') {
           try {
-            const { name, timer, maxPlayers, sessionId } = data;
+            const { name, timer, maxPlayers, minRange, maxRange, sessionId } = data;
             if (!name || name.trim().length < 2) {
               return replyAck({ success: false, error: 'Nama minimal 2 karakter!' });
             }
@@ -583,7 +587,7 @@ app.get(
 
             const dbPlayer = getOrCreatePlayer(db, name);
             const safeTimer = Math.min(30, Math.max(10, Number(timer) || 30));
-            const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers });
+            const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers, minRange, maxRange });
             const joinRes = roomManager.joinRoom({
               code: room.code,
               socketId: safeSessionId,
@@ -802,10 +806,12 @@ app.get(
             roomManager.stopTimer(room.code);
             room.timeLeft = null;
 
+            const minR = room.game?.minRange ?? room.minRange ?? -20;
+            const maxR = room.game?.maxRange ?? room.maxRange ?? 20;
             const safeInput =
               inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
                 ? Math.round(Number(inputNumber))
-                : Math.floor(Math.random() * 41) - 20;
+                : Math.floor(Math.random() * (maxR - minR + 1)) + minR;
 
             const roll = calculateRollWithInput({
               screenNumber: challenge.screenNumber,

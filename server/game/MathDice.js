@@ -13,10 +13,14 @@ export function calculateDice(raw) {
   return { steps, direction, raw, extraTurn };
 }
 
-export function generateChallenge() {
-  const screenNumber = Math.floor(Math.random() * 41) - 20; // -20 to 20
+export function generateChallenge(min = -20, max = 20) {
+  const minVal = Number.isFinite(Number(min)) ? Number(min) : -20;
+  const maxVal = Number.isFinite(Number(max)) ? Number(max) : 20;
+  const low = Math.min(minVal, maxVal);
+  const high = Math.max(minVal, maxVal);
+  const screenNumber = Math.floor(Math.random() * (high - low + 1)) + low;
   const op = Math.random() < 0.5 ? '+' : '-';
-  return { screenNumber, op };
+  return { screenNumber, op, min: low, max: high };
 }
 
 export function calculateRollWithInput({ screenNumber, op, userInput }) {
@@ -35,9 +39,11 @@ export function calculateRollWithInput({ screenNumber, op, userInput }) {
   };
 }
 
-export function rollMathDice() {
-  const challenge = generateChallenge();
-  const randomInput = Math.floor(Math.random() * 41) - 20;
+export function rollMathDice(min = -20, max = 20) {
+  const challenge = generateChallenge(min, max);
+  const low = challenge.min;
+  const high = challenge.max;
+  const randomInput = Math.floor(Math.random() * (high - low + 1)) + low;
   return calculateRollWithInput({
     screenNumber: challenge.screenNumber,
     op: challenge.op,

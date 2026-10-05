@@ -8,6 +8,8 @@ export function toPublicRoom(room) {
     hostName: room.hostName,
     defaultTimer: room.defaultTimer,
     maxPlayers: room.maxPlayers,
+    minRange: room.minRange ?? -20,
+    maxRange: room.maxRange ?? 20,
     status: room.status,
     players: room.players.map(p => ({
       id: p.id,
@@ -27,13 +29,20 @@ export class RoomManager {
     this.timerIntervals = new Map();
   }
 
-  createRoom({ hostName, defaultTimer = 10, maxPlayers = 4 }) {
+  createRoom({ hostName, defaultTimer = 10, maxPlayers = 4, minRange = -20, maxRange = 20 }) {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const parsedMin = Number.isFinite(Number(minRange)) ? Number(minRange) : -20;
+    const parsedMax = Number.isFinite(Number(maxRange)) ? Number(maxRange) : 20;
+    const low = Math.min(parsedMin, parsedMax);
+    const high = Math.max(parsedMin, parsedMax);
+
     const room = {
       code,
       hostName,
       defaultTimer: Number(defaultTimer) || 30,
       maxPlayers: Math.min(4, Math.max(2, Number(maxPlayers) || 4)),
+      minRange: low,
+      maxRange: high,
       status: 'LOBBY', // 'LOBBY' | 'PLAYING' | 'FINISHED'
       players: [],
       game: null,
@@ -106,7 +115,9 @@ export class RoomManager {
     room.game = new LudoGame({
       id: room.code,
       defaultTimer: room.defaultTimer,
-      players: room.players
+      players: room.players,
+      minRange: room.minRange ?? -20,
+      maxRange: room.maxRange ?? 20
     });
     room.timeLeft = room.defaultTimer;
 

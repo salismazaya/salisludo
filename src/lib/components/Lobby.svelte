@@ -30,6 +30,9 @@
   let joinCode = $state('');
   let selectedTimer = $state(30);
   let selectedMaxPlayers = $state(4);
+  let selectedRangePreset = $state('-20_20'); // '-10_10' | '-20_20' | '-50_50' | '-100_100' | 'CUSTOM'
+  let customMinRange = $state(-20);
+  let customMaxRange = $state(20);
   let errorMessage = $state('');
   let copied = $state(false);
 
@@ -42,10 +45,34 @@
       localStorage.setItem('ludo_player_name', playerName.trim());
     }
     errorMessage = '';
+
+    let minVal = -20;
+    let maxVal = 20;
+    if (selectedRangePreset === '-10_10') {
+      minVal = -10;
+      maxVal = 10;
+    } else if (selectedRangePreset === '-20_20') {
+      minVal = -20;
+      maxVal = 20;
+    } else if (selectedRangePreset === '-50_50') {
+      minVal = -50;
+      maxVal = 50;
+    } else if (selectedRangePreset === '-100_100') {
+      minVal = -100;
+      maxVal = 100;
+    } else if (selectedRangePreset === 'CUSTOM') {
+      minVal = Number.isFinite(Number(customMinRange)) ? Number(customMinRange) : -20;
+      maxVal = Number.isFinite(Number(customMaxRange)) ? Number(customMaxRange) : 20;
+    }
+    const low = Math.min(minVal, maxVal);
+    const high = Math.max(minVal, maxVal);
+
     triggerCreate({
       name: playerName.trim(),
       timer: selectedTimer,
-      maxPlayers: selectedMaxPlayers
+      maxPlayers: selectedMaxPlayers,
+      minRange: low,
+      maxRange: high
     }, (err) => {
       if (err) errorMessage = err;
     });
@@ -162,7 +189,7 @@
           </button>
         </div>
       {:else if mode === 'CREATE'}
-        <!-- Custom Timer & Max Players (2..4) -->
+        <!-- Custom Timer, Max Players & Number Range -->
         <div class="space-y-4 pt-2 border-t-2 border-black">
           <div>
             <span class="block text-xs font-black uppercase tracking-wider mb-2 text-black">
@@ -196,6 +223,61 @@
                 </button>
               {/each}
             </div>
+          </div>
+
+          <!-- Setting Rentang Angka Soal Dadu -->
+          <div>
+            <span class="block text-xs font-black uppercase tracking-wider mb-2 text-black">
+              Rentang Angka Soal Dadu
+            </span>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+              {#each [
+                { id: '-10_10', label: '-10 s.d. 10' },
+                { id: '-20_20', label: '-20 s.d. 20 (Standar)' },
+                { id: '-50_50', label: '-50 s.d. 50' },
+                { id: '-100_100', label: '-100 s.d. 100' }
+              ] as r}
+                <button
+                  type="button"
+                  onclick={() => (selectedRangePreset = r.id)}
+                  class="py-2 px-2 font-black text-xs border-2 border-black transition text-center {selectedRangePreset === r.id ? 'bg-[#FFEB3B] text-black shadow-[3px_3px_0px_#000]' : 'bg-white text-black hover:bg-slate-100 shadow-[2px_2px_0px_#000]'}"
+                >
+                  {r.label}
+                </button>
+              {/each}
+            </div>
+
+            <!-- Tombol Opsi Kustom -->
+            <button
+              type="button"
+              onclick={() => (selectedRangePreset = selectedRangePreset === 'CUSTOM' ? '-20_20' : 'CUSTOM')}
+              class="w-full py-2 font-black text-xs border-2 border-black transition text-center {selectedRangePreset === 'CUSTOM' ? 'bg-[#FFE600] text-black shadow-[3px_3px_0px_#000]' : 'bg-slate-100 text-black hover:bg-slate-200 shadow-[2px_2px_0px_#000]'}"
+            >
+              {selectedRangePreset === 'CUSTOM' ? '✓ Rentang Kustom Aktif' : 'Atur Rentang Angka Kustom (Bebas)'}
+            </button>
+
+            {#if selectedRangePreset === 'CUSTOM'}
+              <div class="grid grid-cols-2 gap-2 mt-2 p-2.5 bg-[#F8FAFC] border-2 border-black shadow-[2px_2px_0px_#000]">
+                <div>
+                  <label for="custom-min" class="block text-[10px] font-black uppercase text-black mb-1">Batas Bawah (Min)</label>
+                  <input
+                    id="custom-min"
+                    type="number"
+                    bind:value={customMinRange}
+                    class="w-full px-2 py-1 bg-white border-2 border-black font-mono font-black text-sm text-center text-black focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label for="custom-max" class="block text-[10px] font-black uppercase text-black mb-1">Batas Atas (Max)</label>
+                  <input
+                    id="custom-max"
+                    type="number"
+                    bind:value={customMaxRange}
+                    class="w-full px-2 py-1 bg-white border-2 border-black font-mono font-black text-sm text-center text-black focus:outline-none"
+                  />
+                </div>
+              </div>
+            {/if}
           </div>
 
           <div class="grid grid-cols-2 gap-3 pt-2">
@@ -273,6 +355,22 @@
             <span>Salin Kode</span>
           {/if}
         </button>
+      </div>
+
+      <!-- Room Config Details Badge -->
+      <div class="grid grid-cols-3 gap-2 text-center text-xs font-black uppercase text-black border-2 border-black p-2 bg-[#F8FAFC]">
+        <div>
+          <span class="block text-[9px] text-slate-500">Timer</span>
+          <span>{room.defaultTimer}s</span>
+        </div>
+        <div>
+          <span class="block text-[9px] text-slate-500">Kapasitas</span>
+          <span>{room.maxPlayers} Pemain</span>
+        </div>
+        <div>
+          <span class="block text-[9px] text-slate-500">Rentang Soal</span>
+          <span>{room.minRange ?? -20} s.d. {room.maxRange ?? 20}</span>
+        </div>
       </div>
 
       <!-- Player List in Room -->

@@ -2,10 +2,14 @@ import { computeTokenTargetPosition, isSafeSquare } from './Board.js';
 import { generateChallenge } from './MathDice.js';
 
 export class LudoGame {
-  constructor({ id, defaultTimer = 30, players }) {
+  constructor({ id, defaultTimer = 30, players, minRange = -20, maxRange = 20 }) {
     this.id = id;
     this.defaultTimer = Math.min(30, Math.max(10, Number(defaultTimer) || 30));
     this.currentTurnTimer = this.defaultTimer;
+    const parsedMin = Number.isFinite(Number(minRange)) ? Number(minRange) : -20;
+    const parsedMax = Number.isFinite(Number(maxRange)) ? Number(maxRange) : 20;
+    this.minRange = Math.min(parsedMin, parsedMax);
+    this.maxRange = Math.max(parsedMin, parsedMax);
     this.players = players; // array of { id, name, color }
     this.currentTurnIndex = 0;
     this.pendingRoll = null;
@@ -35,7 +39,7 @@ export class LudoGame {
     if (this.state === 'WAITING_FOR_INPUT' && this.currentChallenge) {
       return this.currentChallenge;
     }
-    this.currentChallenge = generateChallenge();
+    this.currentChallenge = generateChallenge(this.minRange, this.maxRange);
     this.state = 'WAITING_FOR_INPUT';
     return this.currentChallenge;
   }

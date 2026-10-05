@@ -66,4 +66,20 @@ describe('MathDice calculation rules', () => {
       expect(roll.raw).toBe(expectedRaw);
     }
   });
+
+  it('generates random equation with custom bounds', () => {
+    for (let i = 0; i < 50; i++) {
+      const challenge = generateChallenge(-50, 50);
+      expect(challenge.screenNumber).toBeGreaterThanOrEqual(-50);
+      expect(challenge.screenNumber).toBeLessThanOrEqual(50);
+      expect(challenge.min).toBe(-50);
+      expect(challenge.max).toBe(50);
+
+      const roll = rollMathDice(-10, 10);
+      expect(roll.a).toBeGreaterThanOrEqual(-10);
+      expect(roll.a).toBeLessThanOrEqual(10);
+      expect(roll.b).toBeGreaterThanOrEqual(-10);
+      expect(roll.b).toBeLessThanOrEqual(10);
+    }
+  });
 });
