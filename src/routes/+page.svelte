@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { getSocket } from '$lib/socket.js';
+  import { initRealtime, unsubscribeRealtime } from '$lib/realtime.js';
   import BoardSvg from '$lib/components/BoardSvg.svelte';
   import TurnHUD from '$lib/components/TurnHUD.svelte';
   import Lobby from '$lib/components/Lobby.svelte';
@@ -33,6 +34,114 @@
   // Sound toggle
   let soundEnabled = $state(true);
 
+  // Central Realtime Event Handler (handles Pusher events & Socket.IO fallback)
+  function handleGameEvent(eventName, data) {
+    if (!data) return;
+
+    switch (eventName) {
+      case 'room_updated':
+        currentRoom = data;
+        break;
+
+      case 'player_joined':
+        currentRoom = data.room || data;
+        if (soundEnabled) sounds.playJoin();
+        break;
+
+      case 'player_left':
+        currentRoom = data.room || data;
+        break;
+
+      case 'player_connection_change':
+        if (data.room) currentRoom = data.room;
+        break;
+
+      case 'game_started':
+        gameView = 'PLAYING';
+        tokens = data.tokens || {};
+        activePlayer = data.activePlayer;
+        totalTimer = data.currentTimer || 30;
+        timeLeft = data.currentTimer || 30;
+        gameState = data.gameState || 'WAITING_FOR_ROLL';
+        currentChallenge = null;
+        currentRoll = null;
+        validTokenIds = [];
+        winners = [];
+        if (soundEnabled) sounds.playStart();
+        break;
+
+      case 'timer_tick':
+        timeLeft = data.timeLeft;
+        totalTimer = data.totalTimer || totalTimer || 30;
+        if (data.activePlayerId && !activePlayer) {
+          activePlayer = currentRoom?.players?.find((p) => p.id === data.activePlayerId) || null;
+        }
+        if (data.gameState) gameState = data.gameState;
+        if (data.tokens) tokens = data.tokens;
+        if (data.validTokenIds) validTokenIds = data.validTokenIds;
+        if (soundEnabled && timeLeft <= 2 && timeLeft > 0) {
+          sounds.playTick();
+        }
+        break;
+
+      case 'challenge_ready':
+        currentChallenge = data.currentChallenge;
+        if (data.activePlayer) activePlayer = data.activePlayer;
+        gameState = 'WAITING_FOR_INPUT';
+        timeLeft = data.timeLeft ?? totalTimer;
+        totalTimer = data.currentTimer ?? totalTimer;
+        break;
+
+      case 'dice_rolled':
+        currentRoll = data.roll;
+        validTokenIds = data.validTokenIds || [];
+        if (data.activePlayer) activePlayer = data.activePlayer;
+        gameState = 'WAITING_FOR_MOVE';
+        if (soundEnabled) sounds.playRoll();
+        break;
+
+      case 'token_moved':
+        tokens = data.tokens || tokens;
+        if (data.activePlayer) activePlayer = data.activePlayer;
+        gameState = data.gameState || 'WAITING_FOR_ROLL';
+        currentRoll = null;
+        currentChallenge = null;
+        validTokenIds = [];
+        timeLeft = data.currentTimer ?? 30;
+        totalTimer = data.currentTimer ?? 30;
+
+        if (soundEnabled) {
+          if (data.captured) sounds.playCapture();
+          else if (data.reachedHome) sounds.playHome();
+          else sounds.playMove();
+        }
+        break;
+
+      case 'turn_passed':
+      case 'turn_timeout':
+        if (data.activePlayer) activePlayer = data.activePlayer;
+        else if (data.nextPlayer) activePlayer = data.nextPlayer;
+        gameState = data.gameState || 'WAITING_FOR_ROLL';
+        currentRoll = null;
+        currentChallenge = null;
+        validTokenIds = [];
+        timeLeft = data.currentTimer ?? 30;
+        totalTimer = data.currentTimer ?? 30;
+        break;
+
+      case 'game_over':
+        gameView = 'FINISHED';
+        winners = data.winners || [];
+        if (soundEnabled) sounds.playWin();
+        break;
+    }
+  }
+
+  function subscribeRoomRealtime(code) {
+    if (!code) return;
+    initRealtime(code, handleGameEvent);
+  }
+
   onMount(() => {
     sessionId = localStorage.getItem('ludo_math_session_id');
     if (!sessionId) {
@@ -43,25 +152,29 @@
     const savedName = localStorage.getItem('ludo_math_player_name');
     if (savedName) playerName = savedName;
 
-    socket = getSocket();
-
-    // Pastikan loading tidak gantung jika socket butuh waktu konek
+    // Timeout pengaman agar UI tidak stuck loading
     const timeoutTimer = setTimeout(() => {
       if (isRestoringSession) {
         isRestoringSession = false;
       }
     }, 2000);
 
-    socket.on('connect', () => {
-      // Rejoin existing room if available
-      const savedCode = localStorage.getItem('ludo_math_room_code');
-      if (savedCode && sessionId) {
-        socket.emit('rejoin_room', { code: savedCode, sessionId }, (res) => {
+    const savedCode = localStorage.getItem('ludo_math_room_code');
+    if (savedCode && sessionId) {
+      fetch('/api/rooms/rejoin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: savedCode, sessionId })
+      })
+        .then((res) => res.json())
+        .then((res) => {
           clearTimeout(timeoutTimer);
           isRestoringSession = false;
           if (res && res.success) {
             currentRoom = res.room;
             myPlayer = res.player;
+            subscribeRoomRealtime(res.room.code);
+
             if (res.gameStarted) {
               gameView = 'PLAYING';
               tokens = res.tokens || {};
@@ -79,123 +192,85 @@
             currentRoom = null;
             gameView = 'LOBBY';
           }
+        })
+        .catch(() => {
+          clearTimeout(timeoutTimer);
+          isRestoringSession = false;
         });
-      } else {
-        clearTimeout(timeoutTimer);
-        isRestoringSession = false;
-      }
-    });
+    } else {
+      clearTimeout(timeoutTimer);
+      isRestoringSession = false;
+    }
 
-    socket.on('player_joined', (data) => {
-      currentRoom = data.room;
-      if (soundEnabled) sounds.playJoin();
-    });
-
-    socket.on('room_updated', (data) => {
-      currentRoom = data;
-    });
-
-    socket.on('player_left', (data) => {
-      currentRoom = data.room;
-    });
-
-    socket.on('game_started', (data) => {
-      gameView = 'PLAYING';
-      tokens = data.tokens;
-      activePlayer = data.activePlayer;
-      totalTimer = data.currentTimer || 5;
-      timeLeft = data.timeLeft ?? 5;
-      gameState = data.gameState || 'WAITING_FOR_ROLL';
-      currentChallenge = null;
-      currentRoll = null;
-      validTokenIds = data.validTokenIds || [];
-      winners = [];
-      if (soundEnabled) sounds.playStart();
-    });
-
-    socket.on('timer_tick', (data) => {
-      timeLeft = data.timeLeft;
-      totalTimer = data.totalTimer || 5;
-      if (soundEnabled && timeLeft <= 2 && timeLeft > 0) {
-        sounds.playTick();
-      }
-    });
-
-    socket.on('challenge_ready', (data) => {
-      currentChallenge = data.challenge;
-      activePlayer = data.activePlayer;
-      gameState = 'WAITING_FOR_INPUT';
-      timeLeft = data.timeLeft ?? 5;
-      totalTimer = data.currentTimer || 5;
-    });
-
-    socket.on('dice_rolled', (data) => {
-      currentRoll = data.roll;
-      validTokenIds = data.validTokenIds || [];
-      activePlayer = data.activePlayer;
-      gameState = 'WAITING_FOR_MOVE';
-      if (soundEnabled) sounds.playRoll();
-    });
-
-    socket.on('token_moved', (data) => {
-      tokens = data.tokens;
-      activePlayer = data.activePlayer;
-      gameState = data.gameState;
-      currentRoll = null;
-      currentChallenge = null;
-      validTokenIds = [];
-      timeLeft = data.timeLeft ?? 5;
-      totalTimer = data.currentTimer || 5;
-
-      if (soundEnabled) {
-        if (data.captured) sounds.playCapture();
-        else if (data.reachedHome) sounds.playHome();
-        else sounds.playMove();
-      }
-    });
-
-    socket.on('turn_passed', (data) => {
-      activePlayer = data.activePlayer;
-      gameState = data.gameState || 'WAITING_FOR_ROLL';
-      currentRoll = null;
-      currentChallenge = null;
-      validTokenIds = [];
-      timeLeft = data.timeLeft ?? 5;
-      totalTimer = data.currentTimer || 5;
-    });
-
-    socket.on('game_over', (data) => {
-      gameView = 'FINISHED';
-      winners = data.winners || [];
-      if (soundEnabled) sounds.playWin();
-    });
+    // Socket.IO fallback listener
+    socket = getSocket();
+    if (socket) {
+      [
+        'player_joined',
+        'room_updated',
+        'player_left',
+        'player_connection_change',
+        'game_started',
+        'timer_tick',
+        'challenge_ready',
+        'dice_rolled',
+        'token_moved',
+        'turn_passed',
+        'turn_timeout',
+        'game_over'
+      ].forEach((ev) => {
+        socket.on(ev, (data) => handleGameEvent(ev, data));
+      });
+    }
 
     return () => {
-      // Cleanup
+      unsubscribeRealtime();
     };
   });
 
-  function handleCreateRoom({ name, timer, maxPlayers }, callback) {
+  async function handleCreateRoom({ name, timer, maxPlayers }, callback) {
     localStorage.setItem('ludo_math_player_name', name);
-    socket.emit('create_room', { name, timer, maxPlayers, sessionId }, (res) => {
+    try {
+      const res = await fetch('/api/rooms/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, timer, maxPlayers, sessionId })
+      }).then((r) => r.json());
+
       if (res && res.success) {
         currentRoom = res.room;
         myPlayer = res.player;
         localStorage.setItem('ludo_math_room_code', res.room.code);
+        subscribeRoomRealtime(res.room.code);
+        if (socket && socket.connected) {
+          socket.emit('rejoin_room', { code: res.room.code, sessionId }, () => {});
+        }
         if (callback) callback(null);
       } else {
         if (callback) callback(res?.error || 'Gagal membuat room.');
       }
-    });
+    } catch (err) {
+      if (callback) callback('Terjadi gangguan koneksi');
+    }
   }
 
-  function handleJoinRoom({ name, code }, callback) {
+  async function handleJoinRoom({ name, code }, callback) {
     localStorage.setItem('ludo_math_player_name', name);
-    socket.emit('join_room', { name, code, sessionId }, (res) => {
+    try {
+      const res = await fetch('/api/rooms/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, code, sessionId })
+      }).then((r) => r.json());
+
       if (res && res.success) {
         currentRoom = res.room;
         myPlayer = res.player;
         localStorage.setItem('ludo_math_room_code', res.room.code);
+        subscribeRoomRealtime(res.room.code);
+        if (socket && socket.connected) {
+          socket.emit('rejoin_room', { code: res.room.code, sessionId }, () => {});
+        }
 
         if (res.gameStarted) {
           gameView = 'PLAYING';
@@ -214,42 +289,68 @@
       } else {
         if (callback) callback(res?.error || 'Room tidak ditemukan.');
       }
+    } catch (err) {
+      if (callback) callback('Terjadi gangguan koneksi');
+    }
+  }
+
+  async function handleStartGame() {
+    if (!currentRoom) return;
+    await fetch('/api/rooms/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: currentRoom.code, sessionId })
     });
   }
 
-  function handleStartGame() {
-    if (!currentRoom) return;
-    socket.emit('start_game', { code: currentRoom.code }, () => {});
-  }
-
-  function handleSpinDice() {
+  async function handleSpinDice() {
     if (!currentRoom) return;
     if (soundEnabled) sounds.playRoll();
-    socket.emit('spin_dice', { code: currentRoom.code }, () => {});
-  }
-
-  function handleRollDice(inputNumber) {
-    if (!currentRoom) return;
-    socket.emit('roll_dice', { code: currentRoom.code, inputNumber }, () => {});
-  }
-
-  function handleSelectToken(tokenId) {
-    if (!currentRoom) return;
-    socket.emit('move_token', { code: currentRoom.code, tokenId }, () => {});
-  }
-
-  function openLeaderboard() {
-    if (!socket) return;
-    socket.emit('get_leaderboard', (res) => {
-      leaderboardData = res?.leaderboard ?? [];
-      showLeaderboard = true;
+    await fetch('/api/rooms/spin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: currentRoom.code, sessionId })
     });
   }
 
-  function leaveGame() {
-    if (currentRoom && socket) {
-      socket.emit('leave_room', { code: currentRoom.code });
+  async function handleRollDice(inputNumber) {
+    if (!currentRoom) return;
+    await fetch('/api/rooms/roll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: currentRoom.code, sessionId, inputNumber })
+    });
+  }
+
+  async function handleSelectToken(tokenId) {
+    if (!currentRoom) return;
+    await fetch('/api/rooms/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: currentRoom.code, sessionId, tokenId })
+    });
+  }
+
+  async function openLeaderboard() {
+    try {
+      const res = await fetch('/api/leaderboard').then((r) => r.json());
+      leaderboardData = res?.leaderboard ?? [];
+      showLeaderboard = true;
+    } catch {
+      leaderboardData = [];
+      showLeaderboard = true;
     }
+  }
+
+  async function leaveGame() {
+    if (currentRoom) {
+      fetch('/api/rooms/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: currentRoom.code, sessionId })
+      }).catch(() => {});
+    }
+    unsubscribeRealtime();
     localStorage.removeItem('ludo_math_room_code');
     currentRoom = null;
     myPlayer = null;
@@ -401,7 +502,7 @@
 
         <div class="space-y-2">
           {#each winners as winnerId, idx}
-            {@const p = currentRoom?.players.find(x => x.id === winnerId)}
+            {@const p = currentRoom?.players.find((x) => x.id === winnerId)}
             <div class="flex items-center justify-between p-3 bg-[#F8FAFC] border-2 border-black shadow-[2px_2px_0px_#000]">
               <span class="font-black text-black text-sm uppercase">Juara {idx + 1}</span>
               <span class="font-black text-black text-sm uppercase">{p?.name ?? 'Pemain'}</span>

@@ -8,7 +8,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { RoomManager, toPublicRoom } from './game/RoomManager.js';
-import { rollMathDice, calculateRollWithInput } from './game/MathDice.js';
+import { calculateRollWithInput } from './game/MathDice.js';
+import { broadcast, getPusherConfig, isPusherReady } from './realtime.js';
 import {
   createDb,
   getOrCreatePlayer,
@@ -26,12 +27,6 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[SERVER ERROR] Unhandled rejection:', reason);
 });
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*' }
-});
-
 // Auto-load .env if available
 if (typeof process.loadEnvFile === 'function') {
   try {
@@ -41,16 +36,40 @@ if (typeof process.loadEnvFile === 'function') {
   }
 }
 
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*' }
+});
+
 const PORT = Number(process.env.PORT) || 3333;
 const HOST = process.env.HOST || '0.0.0.0';
 const db = createDb(process.env.DB_PATH || 'ludo.db');
 const roomManager = new RoomManager();
 
+app.use(express.json());
+
+// Public API for client to get Pusher public config safely
+app.get('/api/pusher-config', (req, res) => {
+  const cfg = getPusherConfig();
+  res.json({
+    key: cfg.key,
+    cluster: cfg.cluster,
+    ready: isPusherReady()
+  });
+});
+
+// Realtime dispatch helper: always emits to Pusher & Socket.IO (hybrid for zero-disruption)
+function emitRealtime(code, event, payload) {
+  io.to(code).emit(event, payload);
+  broadcast(code, event, payload);
+}
+
 // Timer helpers
 function notifyTurnPaused(room) {
   roomManager.stopTimer(room.code);
   room.timeLeft = room.game.currentTurnTimer;
-  io.to(room.code).emit('timer_tick', {
+  emitRealtime(room.code, 'timer_tick', {
     timeLeft: room.game.currentTurnTimer,
     totalTimer: room.game.currentTurnTimer,
     activePlayerId: room.game.currentTurnPlayer.id,
@@ -64,7 +83,7 @@ function startCountdownTimer(room) {
   let timeLeft = room.game.currentTurnTimer;
   room.timeLeft = timeLeft;
 
-  io.to(room.code).emit('timer_tick', {
+  emitRealtime(room.code, 'timer_tick', {
     timeLeft,
     totalTimer: room.game.currentTurnTimer,
     activePlayerId: room.game.currentTurnPlayer.id,
@@ -76,7 +95,7 @@ function startCountdownTimer(room) {
     timeLeft -= 1;
     room.timeLeft = timeLeft;
 
-    io.to(room.code).emit('timer_tick', {
+    emitRealtime(room.code, 'timer_tick', {
       timeLeft,
       totalTimer: room.game.currentTurnTimer,
       activePlayerId: room.game.currentTurnPlayer.id,
@@ -104,16 +123,17 @@ function startCountdownTimer(room) {
           ...autoRoll
         });
 
-        io.to(room.code).emit('dice_rolled', {
+        emitRealtime(room.code, 'dice_rolled', {
           roll: autoRoll,
           validTokenIds: rollMeta.validTokenIds,
           autoSkip: rollMeta.autoSkip,
-          penalty: rollMeta.penalty
+          penalty: rollMeta.penalty,
+          activePlayer: room.game.currentTurnPlayer
         });
 
         // Hentikan timer dan tunggu pemain memilih bidak
         room.timeLeft = null;
-        io.to(room.code).emit('timer_tick', {
+        emitRealtime(room.code, 'timer_tick', {
           timeLeft: null,
           totalTimer: room.game.currentTurnTimer,
           activePlayerId: room.game.currentTurnPlayer.id,
@@ -128,10 +148,12 @@ function startCountdownTimer(room) {
           setTimeout(() => {
             room.game.nextTurn();
             room.timeLeft = room.game.currentTurnTimer;
-            io.to(room.code).emit('turn_passed', {
+            emitRealtime(room.code, 'turn_passed', {
+              activePlayer: room.game.currentTurnPlayer,
               nextPlayer: room.game.currentTurnPlayer,
               currentTimer: room.game.currentTurnTimer,
-              currentChallenge: null
+              currentChallenge: null,
+              gameState: room.game.state
             });
             notifyTurnPaused(room);
           }, 1500);
@@ -142,10 +164,12 @@ function startCountdownTimer(room) {
       // Timeout auto pass to next player
       room.game.nextTurn();
       room.timeLeft = room.game.currentTurnTimer;
-      io.to(room.code).emit('turn_timeout', {
+      emitRealtime(room.code, 'turn_timeout', {
+        activePlayer: room.game.currentTurnPlayer,
         nextPlayer: room.game.currentTurnPlayer,
         currentTimer: room.game.currentTurnTimer,
-        currentChallenge: null
+        currentChallenge: null,
+        gameState: room.game.state
       });
       notifyTurnPaused(room);
     }
@@ -154,6 +178,348 @@ function startCountdownTimer(room) {
   roomManager.setTimerInterval(room.code, interval);
 }
 
+// REST endpoints for action triggers
+app.post('/api/rooms/create', (req, res) => {
+  try {
+    const { name, timer, maxPlayers, sessionId } = req.body || {};
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ success: false, error: 'Nama minimal 2 karakter!' });
+    }
+    const safeSessionId = sessionId || `sess_${Math.random().toString(36).substring(2, 9)}`;
+    const dbPlayer = getOrCreatePlayer(db, name);
+    const safeTimer = Math.min(30, Math.max(10, Number(timer) || 30));
+    const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers });
+    const joinRes = roomManager.joinRoom({
+      code: room.code,
+      socketId: safeSessionId,
+      sessionId: safeSessionId,
+      name
+    });
+
+    res.json({
+      success: true,
+      room: toPublicRoom(joinRes.room),
+      player: { ...joinRes.player, dbId: dbPlayer.id }
+    });
+  } catch (err) {
+    console.error('Error in /api/rooms/create:', err);
+    res.status(500).json({ success: false, error: 'Gagal membuat room' });
+  }
+});
+
+app.post('/api/rooms/join', (req, res) => {
+  try {
+    const { code, name, sessionId } = req.body || {};
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({ success: false, error: 'Nama minimal 2 karakter!' });
+    }
+    if (!code || code.trim().length !== 6) {
+      return res.status(400).json({ success: false, error: 'Kode room harus 6 huruf!' });
+    }
+
+    const safeSessionId = sessionId || `sess_${Math.random().toString(36).substring(2, 9)}`;
+    const dbPlayer = getOrCreatePlayer(db, name);
+    const result = roomManager.joinRoom({
+      code: code.toUpperCase(),
+      socketId: safeSessionId,
+      sessionId: safeSessionId,
+      name
+    });
+
+    if (result.error) return res.status(400).json({ success: false, error: result.error });
+
+    let gameStatePayload = {};
+    if (result.room.status === 'PLAYING' && result.room.game) {
+      gameStatePayload = {
+        gameStarted: true,
+        tokens: result.room.game.tokens,
+        activePlayer: result.room.game.currentTurnPlayer,
+        currentTimer: result.room.game.currentTurnTimer,
+        currentChallenge: result.room.game.currentChallenge,
+        timeLeft: result.room.timeLeft ?? result.room.game.currentTurnTimer,
+        gameState: result.room.game.state,
+        currentRoll: result.room.game.pendingRoll,
+        validTokenIds: result.room.game.getValidMoves(safeSessionId),
+        winners: result.room.game.winners
+      };
+    }
+
+    emitRealtime(result.room.code, 'room_updated', toPublicRoom(result.room));
+
+    res.json({
+      success: true,
+      room: toPublicRoom(result.room),
+      player: { ...result.player, dbId: dbPlayer.id },
+      isRejoin: result.isRejoin,
+      ...gameStatePayload
+    });
+  } catch (err) {
+    console.error('Error in /api/rooms/join:', err);
+    res.status(500).json({ success: false, error: 'Gagal bergabung ke room' });
+  }
+});
+
+app.post('/api/rooms/rejoin', (req, res) => {
+  try {
+    const { code, sessionId } = req.body || {};
+    if (!code || !sessionId) {
+      return res.status(400).json({ success: false, error: 'Kode atau sesi tidak valid' });
+    }
+    const room = roomManager.rooms.get(code.toUpperCase());
+    if (!room) {
+      return res.status(404).json({ success: false, error: 'Room tidak ditemukan' });
+    }
+
+    const existingPlayer = room.players.find(p => p.id === sessionId);
+    if (!existingPlayer) {
+      return res.status(404).json({ success: false, error: 'Pemain tidak ditemukan di room ini' });
+    }
+
+    existingPlayer.connected = true;
+
+    let gameStatePayload = {};
+    if (room.status === 'PLAYING' && room.game) {
+      gameStatePayload = {
+        gameStarted: true,
+        tokens: room.game.tokens,
+        activePlayer: room.game.currentTurnPlayer,
+        currentTimer: room.game.currentTurnTimer,
+        currentChallenge: room.game.currentChallenge,
+        timeLeft: room.timeLeft ?? room.game.currentTurnTimer,
+        gameState: room.game.state,
+        currentRoll: room.game.pendingRoll,
+        validTokenIds: room.game.getValidMoves(sessionId),
+        winners: room.game.winners
+      };
+    }
+
+    emitRealtime(room.code, 'room_updated', toPublicRoom(room));
+
+    res.json({
+      success: true,
+      room: toPublicRoom(room),
+      player: existingPlayer,
+      isRejoin: true,
+      ...gameStatePayload
+    });
+  } catch (err) {
+    console.error('Error in /api/rooms/rejoin:', err);
+    res.status(500).json({ success: false, error: 'Gagal menghubungkan ulang' });
+  }
+});
+
+app.post('/api/rooms/start', (req, res) => {
+  try {
+    const { code, sessionId } = req.body || {};
+    const result = roomManager.startGame(code, sessionId);
+    if (result.error) return res.status(400).json({ success: false, error: result.error });
+
+    recordMatchStart(db, {
+      roomCode: code,
+      timer: result.room.defaultTimer,
+      maxPlayers: result.room.maxPlayers
+    });
+
+    emitRealtime(result.room.code, 'game_started', {
+      players: result.room.players.map(p => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
+      tokens: result.room.game.tokens,
+      activePlayer: result.room.game.currentTurnPlayer,
+      currentTimer: result.room.game.currentTurnTimer,
+      currentChallenge: null,
+      gameState: 'WAITING_FOR_ROLL'
+    });
+    notifyTurnPaused(result.room);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in /api/rooms/start:', err);
+    res.status(500).json({ success: false, error: 'Gagal memulai permainan' });
+  }
+});
+
+app.post('/api/rooms/spin', (req, res) => {
+  try {
+    const { code, sessionId } = req.body || {};
+    const room = roomManager.rooms.get((code || '').toUpperCase());
+    if (!room || !room.game) return res.status(400).json({ error: 'Permainan tidak ditemukan!' });
+
+    const activeId = room.game.currentTurnPlayer.id;
+    if (activeId !== sessionId) {
+      return res.status(403).json({ error: 'Bukan giliranmu untuk roll dadu!' });
+    }
+
+    const challenge = room.game.spinChallenge(sessionId);
+    emitRealtime(room.code, 'challenge_ready', {
+      activePlayer: room.game.currentTurnPlayer,
+      activePlayerId: activeId,
+      currentChallenge: challenge,
+      timeLeft: room.game.currentTurnTimer,
+      currentTimer: room.game.currentTurnTimer
+    });
+
+    startCountdownTimer(room);
+    res.json({ success: true, challenge });
+  } catch (err) {
+    console.error('Error in /api/rooms/spin:', err);
+    res.status(500).json({ error: err.message || 'Gagal memutar dadu' });
+  }
+});
+
+app.post('/api/rooms/roll', (req, res) => {
+  try {
+    const { code, sessionId, inputNumber } = req.body || {};
+    const room = roomManager.rooms.get((code || '').toUpperCase());
+    if (!room || !room.game) return res.status(400).json({ error: 'Permainan tidak ditemukan!' });
+
+    const activeId = room.game.currentTurnPlayer.id;
+    if (activeId !== sessionId) {
+      return res.status(403).json({ error: 'Bukan giliranmu untuk melempar!' });
+    }
+
+    let challenge = room.game.currentChallenge;
+    if (!challenge) {
+      challenge = room.game.spinChallenge(sessionId);
+      emitRealtime(room.code, 'challenge_ready', {
+        activePlayer: room.game.currentTurnPlayer,
+        activePlayerId: activeId,
+        currentChallenge: challenge
+      });
+    }
+
+    roomManager.stopTimer(room.code);
+    room.timeLeft = null;
+
+    const safeInput = inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
+      ? Math.round(Number(inputNumber))
+      : Math.floor(Math.random() * 41) - 20;
+
+    const roll = calculateRollWithInput({
+      screenNumber: challenge.screenNumber,
+      op: challenge.op,
+      userInput: safeInput
+    });
+
+    const rollMeta = room.game.applyRoll(roll);
+
+    recordRollLog(db, {
+      roomCode: room.code,
+      playerName: room.game.currentTurnPlayer.name,
+      ...roll
+    });
+
+    emitRealtime(room.code, 'dice_rolled', {
+      roll,
+      validTokenIds: rollMeta.validTokenIds,
+      autoSkip: rollMeta.autoSkip,
+      penalty: rollMeta.penalty,
+      activePlayer: room.game.currentTurnPlayer
+    });
+
+    emitRealtime(room.code, 'timer_tick', {
+      timeLeft: null,
+      totalTimer: room.game.currentTurnTimer,
+      activePlayerId: activeId,
+      currentChallenge: challenge,
+      gameState: room.game.state,
+      tokens: room.game.tokens,
+      validTokenIds: rollMeta.validTokenIds,
+      isPaused: true
+    });
+
+    if (rollMeta.autoSkip) {
+      setTimeout(() => {
+        room.game.nextTurn();
+        room.timeLeft = room.game.currentTurnTimer;
+        emitRealtime(room.code, 'turn_passed', {
+          activePlayer: room.game.currentTurnPlayer,
+          nextPlayer: room.game.currentTurnPlayer,
+          currentTimer: room.game.currentTurnTimer,
+          currentChallenge: null,
+          gameState: room.game.state
+        });
+        notifyTurnPaused(room);
+      }, 2000);
+    }
+
+    res.json({ success: true, roll });
+  } catch (err) {
+    console.error('Error in /api/rooms/roll:', err);
+    res.status(500).json({ error: 'Gagal melempar dadu' });
+  }
+});
+
+app.post('/api/rooms/move', (req, res) => {
+  try {
+    const { code, sessionId, tokenId } = req.body || {};
+    const room = roomManager.rooms.get((code || '').toUpperCase());
+    if (!room || !room.game) return res.status(400).json({ success: false, error: 'Permainan tidak ditemukan!' });
+
+    const moveRes = room.game.moveToken(sessionId, tokenId);
+    if (!moveRes.success) return res.status(400).json({ success: false, error: moveRes.reason });
+
+    if (moveRes.captured) {
+      recordPlayerCapture(db, room.game.currentTurnPlayer.name);
+    }
+
+    if (moveRes.finished) {
+      recordMatchWin(db, code, room.game.currentTurnPlayer.name);
+    }
+
+    emitRealtime(room.code, 'token_moved', {
+      playerId: sessionId,
+      tokenId,
+      tokens: room.game.tokens,
+      captured: moveRes.captured,
+      extraTurn: moveRes.extraTurn,
+      activePlayer: room.game.currentTurnPlayer,
+      currentTimer: room.game.currentTurnTimer,
+      currentChallenge: room.game.currentChallenge,
+      finished: moveRes.finished,
+      winners: room.game.winners,
+      gameState: room.game.state
+    });
+
+    if (!moveRes.finished) {
+      notifyTurnPaused(room);
+    } else {
+      roomManager.stopTimer(room.code);
+      emitRealtime(room.code, 'game_over', {
+        winners: room.game.winners
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in /api/rooms/move:', err);
+    res.status(500).json({ success: false, error: 'Gagal memindahkan bidak' });
+  }
+});
+
+app.post('/api/rooms/leave', (req, res) => {
+  try {
+    const { sessionId } = req.body || {};
+    const left = roomManager.leave(sessionId);
+    if (left) {
+      emitRealtime(left.code, 'player_left', { sessionId, room: toPublicRoom(left.room) });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error in /api/rooms/leave:', err);
+    res.status(500).json({ success: false });
+  }
+});
+
+app.get('/api/leaderboard', (req, res) => {
+  try {
+    const stats = getLeaderboard(db, 10);
+    res.json({ leaderboard: stats });
+  } catch (err) {
+    console.error('Error in /api/leaderboard:', err);
+    res.json({ leaderboard: [] });
+  }
+});
+
+// Socket.IO compatibility layer (keeps legacy sockets completely functional)
 io.on('connection', (socket) => {
   socket.on('create_room', ({ name, timer, maxPlayers, sessionId }, callback) => {
     try {
@@ -226,7 +592,7 @@ io.on('connection', (socket) => {
         };
       }
 
-      io.to(res.room.code).emit('room_updated', toPublicRoom(res.room));
+      emitRealtime(res.room.code, 'room_updated', toPublicRoom(res.room));
       callback({
         success: true,
         room: toPublicRoom(res.room),
@@ -236,7 +602,7 @@ io.on('connection', (socket) => {
       });
     } catch (err) {
       console.error('Error in join_room:', err);
-      callback({ success: false, error: 'Gagal memproses kamar' });
+      callback({ success: false, error: 'Gagal memproses room' });
     }
   });
 
@@ -250,13 +616,11 @@ io.on('connection', (socket) => {
         return callback({ success: false, error: 'Room tidak ditemukan' });
       }
 
-      // Cari player berdasarkan sessionId
       const existingPlayer = room.players.find(p => p.id === sessionId);
       if (!existingPlayer) {
         return callback({ success: false, error: 'Pemain tidak ditemukan di room ini' });
       }
 
-      // Hubungkan kembali socket
       existingPlayer.socketId = socket.id;
       existingPlayer.connected = true;
       socket.data.sessionId = sessionId;
@@ -279,7 +643,7 @@ io.on('connection', (socket) => {
         };
       }
 
-      io.to(room.code).emit('room_updated', toPublicRoom(room));
+      emitRealtime(room.code, 'room_updated', toPublicRoom(room));
       callback({
         success: true,
         room: toPublicRoom(room),
@@ -304,12 +668,13 @@ io.on('connection', (socket) => {
         maxPlayers: res.room.maxPlayers
       });
 
-      io.to(res.room.code).emit('game_started', {
+      emitRealtime(res.room.code, 'game_started', {
         players: res.room.players.map(p => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
         tokens: res.room.game.tokens,
         activePlayer: res.room.game.currentTurnPlayer,
         currentTimer: res.room.game.currentTurnTimer,
-        currentChallenge: null
+        currentChallenge: null,
+        gameState: 'WAITING_FOR_ROLL'
       });
       notifyTurnPaused(res.room);
       callback({ success: true });
@@ -332,14 +697,15 @@ io.on('connection', (socket) => {
       }
 
       const challenge = room.game.spinChallenge(callerId);
-      io.to(room.code).emit('challenge_ready', {
+      emitRealtime(room.code, 'challenge_ready', {
+        activePlayer: room.game.currentTurnPlayer,
         activePlayerId: activeId,
-        currentChallenge: challenge
+        currentChallenge: challenge,
+        timeLeft: room.game.currentTurnTimer,
+        currentTimer: room.game.currentTurnTimer
       });
 
-      // Start countdown timer ONLY after player rolls
       startCountdownTimer(room);
-
       callback?.({ success: true, challenge });
     } catch (err) {
       console.error('Error in spin_dice:', err);
@@ -359,17 +725,16 @@ io.on('connection', (socket) => {
         return callback({ error: 'Bukan giliranmu untuk melempar!' });
       }
 
-      // If player rolled before spinChallenge, spin now automatically
       let challenge = room.game.currentChallenge;
       if (!challenge) {
         challenge = room.game.spinChallenge(callerId);
-        io.to(room.code).emit('challenge_ready', {
+        emitRealtime(room.code, 'challenge_ready', {
+          activePlayer: room.game.currentTurnPlayer,
           activePlayerId: activeId,
           currentChallenge: challenge
         });
       }
 
-      // Stop turn timer immediately so player can choose pawn at their own pace
       roomManager.stopTimer(room.code);
       room.timeLeft = null;
 
@@ -391,15 +756,15 @@ io.on('connection', (socket) => {
         ...roll
       });
 
-      io.to(room.code).emit('dice_rolled', {
+      emitRealtime(room.code, 'dice_rolled', {
         roll,
         validTokenIds: rollMeta.validTokenIds,
         autoSkip: rollMeta.autoSkip,
-        penalty: rollMeta.penalty
+        penalty: rollMeta.penalty,
+        activePlayer: room.game.currentTurnPlayer
       });
 
-      // Notify clients timer is paused for pawn selection
-      io.to(room.code).emit('timer_tick', {
+      emitRealtime(room.code, 'timer_tick', {
         timeLeft: null,
         totalTimer: room.game.currentTurnTimer,
         activePlayerId: activeId,
@@ -414,10 +779,12 @@ io.on('connection', (socket) => {
         setTimeout(() => {
           room.game.nextTurn();
           room.timeLeft = room.game.currentTurnTimer;
-          io.to(room.code).emit('turn_passed', {
+          emitRealtime(room.code, 'turn_passed', {
+            activePlayer: room.game.currentTurnPlayer,
             nextPlayer: room.game.currentTurnPlayer,
             currentTimer: room.game.currentTurnTimer,
-            currentChallenge: null
+            currentChallenge: null,
+            gameState: room.game.state
           });
           notifyTurnPaused(room);
         }, 2000);
@@ -447,7 +814,7 @@ io.on('connection', (socket) => {
         recordMatchWin(db, code, room.game.currentTurnPlayer.name);
       }
 
-      io.to(room.code).emit('token_moved', {
+      emitRealtime(room.code, 'token_moved', {
         playerId: callerId,
         tokenId,
         tokens: room.game.tokens,
@@ -465,6 +832,9 @@ io.on('connection', (socket) => {
         notifyTurnPaused(room);
       } else {
         roomManager.stopTimer(room.code);
+        emitRealtime(room.code, 'game_over', {
+          winners: room.game.winners
+        });
       }
 
       callback({ success: true });
@@ -489,7 +859,7 @@ io.on('connection', (socket) => {
       const callerId = socket.data.sessionId || socket.id;
       const left = roomManager.leave(callerId);
       if (left) {
-        io.to(left.code).emit('player_left', { sessionId: callerId, room: toPublicRoom(left.room) });
+        emitRealtime(left.code, 'player_left', { sessionId: callerId, room: toPublicRoom(left.room) });
       }
       if (callback) callback({ success: true });
     } catch (err) {
@@ -502,7 +872,7 @@ io.on('connection', (socket) => {
     try {
       const left = roomManager.handleDisconnect(socket.id);
       if (left) {
-        io.to(left.code).emit('player_connection_change', {
+        emitRealtime(left.code, 'player_connection_change', {
           player: {
             id: left.player.id,
             name: left.player.name,
@@ -534,9 +904,9 @@ if (fs.existsSync(buildHandlerPath)) {
   app.get('*', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html>
-  <head><title>Ludo Math Dice</title></head>
+  <head><title>SalisLudo</title></head>
   <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-    <h1>Ludo Math Dice Server Ready</h1>
+    <h1>SalisLudo Server Ready</h1>
     <p>Run <code>npm run build</code> to compile the SvelteKit frontend.</p>
   </body>
 </html>`);
@@ -544,5 +914,5 @@ if (fs.existsSync(buildHandlerPath)) {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`Ludo Math Dice Server running on http://${HOST}:${PORT}`);
+  console.log(`SalisLudo Server running on http://${HOST}:${PORT}`);
 });

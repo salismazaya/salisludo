@@ -378,7 +378,8 @@
     <g id="tokens-layer">
       {#each allRenderedTokens as item}
         {@const gradId = `token-${item.color}`}
-        <!-- Bounding Box for Easy Clicking on Mobile/Desktop (Large Touch Target) -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <circle
           cx={item.renderX}
           cy={item.renderY}
