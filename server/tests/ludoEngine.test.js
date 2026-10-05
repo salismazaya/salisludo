@@ -99,31 +99,45 @@ describe('LudoGame Engine (4 Players)', () => {
     expect(game.tokens['p2'][0].index).toBe(8);
   });
 
-  it('triggers penalty and passes turn on 3 consecutive sixes', () => {
+  it('halves timer on consecutive 6s down to 5s min and allows moving pawn on 3rd+ roll', () => {
     const game = new LudoGame({
       id: 'ROOM_1',
-      defaultTimer: 10,
+      defaultTimer: 30,
       players: [
         { id: 'p1', name: 'Alice', color: 'red' },
         { id: 'p2', name: 'Bob', color: 'green' }
       ]
     });
 
-    // 1st six
-    game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
+    // 1st six (initial timer 30)
+    expect(game.currentTurnTimer).toBe(30);
+    const roll1 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
+    expect(roll1.validTokenIds.length).toBeGreaterThan(0);
     game.moveToken('p1', 0);
     expect(game.currentTurnPlayer.id).toBe('p1');
+    expect(game.currentTurnTimer).toBe(15); // halved to 15s
 
-    // 2nd six
-    game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
+    // 2nd six (timer 15)
+    const roll2 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
+    expect(roll2.validTokenIds.length).toBeGreaterThan(0);
     game.moveToken('p1', 0);
     expect(game.currentTurnPlayer.id).toBe('p1');
+    expect(game.currentTurnTimer).toBe(7); // halved to 7s
 
-    // 3rd six -> Penalty!
+    // 3rd six (timer 7) -> pawn CAN move, moves to roll 4 with timer 5s
     const roll3 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
-    expect(roll3.autoSkip).toBe(true);
-    expect(roll3.penalty).toBe('THREE_CONSECUTIVE_SIXES');
-    expect(game.currentTurnPlayer.id).toBe('p2'); // Turn passed to Bob!
+    expect(roll3.autoSkip).toBeFalsy();
+    expect(roll3.validTokenIds.length).toBeGreaterThan(0);
+    game.moveToken('p1', 0);
+    expect(game.currentTurnPlayer.id).toBe('p1');
+    expect(game.currentTurnTimer).toBe(5); // halved to 5s (min 5s)
+
+    // 4th six (timer 5) -> stays at 5s min
+    const roll4 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
+    expect(roll4.validTokenIds.length).toBeGreaterThan(0);
+    game.moveToken('p1', 0);
+    expect(game.currentTurnPlayer.id).toBe('p1');
+    expect(game.currentTurnTimer).toBe(5);
   });
 
   it('auto-skips when player has no valid moves (e.g. all in yard and roll is not 6)', () => {

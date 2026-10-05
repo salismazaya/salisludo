@@ -8,7 +8,6 @@ export class LudoGame {
     this.currentTurnTimer = this.defaultTimer;
     this.players = players; // array of { id, name, color }
     this.currentTurnIndex = 0;
-    this.consecutiveSixes = 0;
     this.pendingRoll = null;
     this.currentChallenge = null;
     this.state = 'WAITING_FOR_SPIN'; // 'WAITING_FOR_SPIN' | 'WAITING_FOR_INPUT' | 'WAITING_FOR_MOVE' | 'FINISHED'
@@ -43,22 +42,6 @@ export class LudoGame {
 
   applyRoll(rollResult) {
     this.pendingRoll = rollResult;
-
-    // Rule: Check for 3 consecutive sixes penalty
-    if (rollResult.extraTurn && rollResult.steps === 6) {
-      this.consecutiveSixes += 1;
-      if (this.consecutiveSixes >= 3) {
-        // Penalty: Turn passes immediately to next player
-        this.nextTurn();
-        return {
-          autoSkip: true,
-          validTokenIds: [],
-          penalty: 'THREE_CONSECUTIVE_SIXES'
-        };
-      }
-    } else {
-      this.consecutiveSixes = 0;
-    }
 
     // Check valid moves for current player
     const validTokenIds = this.getValidMoves(this.currentTurnPlayer.id);
@@ -199,7 +182,6 @@ export class LudoGame {
   }
 
   nextTurn() {
-    this.consecutiveSixes = 0;
     this.currentTurnTimer = this.defaultTimer; // Reset ke waktu awal (misal 30 detik) saat pindah turn
     this.pendingRoll = null;
     this.currentChallenge = null;
