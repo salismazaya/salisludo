@@ -1,11 +1,11 @@
 # Image resmi Bun berbasis Alpine Linux (ringan, performa tinggi, dan hemat memori)
-FROM oven/bun:alpine
+FROM oven/bun:1-alpine
 
 WORKDIR /app
 
 # Salin dependencies manifest dan install
 COPY package.json bun.lock* ./
-RUN bun install
+RUN bun install --frozen-lockfile || bun install
 
 # Salin seluruh source code aplikasi
 COPY . .

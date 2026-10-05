@@ -2,7 +2,11 @@ let Database;
 if (typeof Bun !== 'undefined') {
   Database = (await import('bun:sqlite')).Database;
 } else {
-  Database = (await import('better-sqlite3')).default;
+  try {
+    Database = (await import('better-sqlite3')).default;
+  } catch {
+    throw new Error('SQLite driver tidak ditemukan. Silakan jalankan aplikasi menggunakan runtime Bun.');
+  }
 }
 import fs from 'fs';
 import path from 'path';
