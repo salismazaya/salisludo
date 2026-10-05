@@ -1,4 +1,9 @@
-import Database from 'better-sqlite3';
+let Database;
+if (typeof Bun !== 'undefined') {
+  Database = (await import('bun:sqlite')).Database;
+} else {
+  Database = (await import('better-sqlite3')).default;
+}
 import fs from 'fs';
 import path from 'path';
 
@@ -10,11 +15,10 @@ export function createDb(dbPath = 'ludo.db') {
   const db = new Database(dbPath);
 
   try {
-    db.pragma('journal_mode = DELETE');
+    db.exec('PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON;');
   } catch (e) {
     // fallback
   }
-  db.pragma('foreign_keys = ON');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS players (

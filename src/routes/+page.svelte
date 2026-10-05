@@ -140,6 +140,9 @@
   function subscribeRoomRealtime(code) {
     if (!code) return;
     initRealtime(code, handleGameEvent);
+    if (socket) {
+      socket.emit('subscribe_room', { code, sessionId });
+    }
   }
 
   onMount(() => {

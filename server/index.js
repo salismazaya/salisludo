@@ -1,9 +1,8 @@
 console.log('🚀 [STARTUP] SalisLudo server starting...');
-console.log(`🚀 [STARTUP] Node: ${process.version} | OS: ${process.platform} ${process.arch}`);
+console.log(`🚀 [STARTUP] Bun: ${typeof Bun !== 'undefined' ? Bun.version : process.version} | OS: ${process.platform} ${process.arch}`);
 
-import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
+import { Hono } from 'hono';
+import { createBunWebSocket } from 'hono/bun';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -27,41 +26,31 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[SERVER ERROR] Unhandled rejection:', reason);
 });
 
-// Auto-load .env if available
-if (typeof process.loadEnvFile === 'function') {
-  try {
-    process.loadEnvFile();
-  } catch (e) {
-    // .env not present or optional
-  }
-}
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*' }
-});
+const { upgradeWebSocket, websocket } = createBunWebSocket();
+const app = new Hono();
 
 const PORT = Number(process.env.PORT) || 3333;
 const HOST = process.env.HOST || '0.0.0.0';
 const db = createDb(process.env.DB_PATH || 'ludo.db');
 const roomManager = new RoomManager();
 
-app.use(express.json());
+let bunServer = null;
 
-// Public API for client to get Pusher public config safely
-app.get('/api/pusher-config', (req, res) => {
-  const cfg = getPusherConfig();
-  res.json({
-    key: cfg.key,
-    cluster: cfg.cluster,
-    ready: isPusherReady()
-  });
-});
+// Track active socket connection metadata
+// ws.raw is the underlying Bun ServerWebSocket
+const socketMeta = new Map();
 
-// Realtime dispatch helper: always emits to Pusher & Socket.IO (hybrid for zero-disruption)
-function emitRealtime(code, event, payload) {
-  io.to(code).emit(event, payload);
+export function roomTopic(code) {
+  return `room-${String(code).toUpperCase()}`;
+}
+
+// Realtime dispatch helper: publishes via Bun WebSocket topic & Pusher (if configured)
+export function emitRealtime(code, event, payload) {
+  const topic = roomTopic(code);
+  const message = JSON.stringify({ event, data: payload });
+  if (bunServer) {
+    bunServer.publish(topic, message);
+  }
   broadcast(code, event, payload);
 }
 
@@ -131,7 +120,6 @@ function startCountdownTimer(room) {
           activePlayer: room.game.currentTurnPlayer
         });
 
-        // Hentikan timer dan tunggu pemain memilih bidak
         room.timeLeft = null;
         emitRealtime(room.code, 'timer_tick', {
           timeLeft: null,
@@ -178,12 +166,35 @@ function startCountdownTimer(room) {
   roomManager.setTimerInterval(room.code, interval);
 }
 
-// REST endpoints for action triggers
-app.post('/api/rooms/create', (req, res) => {
+// REST Endpoints
+app.get('/api/health', (c) => {
+  return c.json({ ok: true, server: 'Bun + Hono', time: Date.now() });
+});
+
+app.get('/api/pusher-config', (c) => {
+  const cfg = getPusherConfig();
+  return c.json({
+    key: cfg.key,
+    cluster: cfg.cluster,
+    ready: isPusherReady()
+  });
+});
+
+app.get('/api/leaderboard', (c) => {
   try {
-    const { name, timer, maxPlayers, sessionId } = req.body || {};
+    const stats = getLeaderboard(db, 10);
+    return c.json({ leaderboard: stats });
+  } catch (err) {
+    console.error('Error in /api/leaderboard:', err);
+    return c.json({ leaderboard: [] });
+  }
+});
+
+app.post('/api/rooms/create', async (c) => {
+  try {
+    const { name, timer, maxPlayers, sessionId } = await c.req.json().catch(() => ({}));
     if (!name || name.trim().length < 2) {
-      return res.status(400).json({ success: false, error: 'Nama minimal 2 karakter!' });
+      return c.json({ success: false, error: 'Nama minimal 2 karakter!' }, 400);
     }
     const safeSessionId = sessionId || `sess_${Math.random().toString(36).substring(2, 9)}`;
     const dbPlayer = getOrCreatePlayer(db, name);
@@ -196,25 +207,25 @@ app.post('/api/rooms/create', (req, res) => {
       name
     });
 
-    res.json({
+    return c.json({
       success: true,
       room: toPublicRoom(joinRes.room),
       player: { ...joinRes.player, dbId: dbPlayer.id }
     });
   } catch (err) {
     console.error('Error in /api/rooms/create:', err);
-    res.status(500).json({ success: false, error: 'Gagal membuat room' });
+    return c.json({ success: false, error: 'Gagal membuat room' }, 500);
   }
 });
 
-app.post('/api/rooms/join', (req, res) => {
+app.post('/api/rooms/join', async (c) => {
   try {
-    const { code, name, sessionId } = req.body || {};
+    const { code, name, sessionId } = await c.req.json().catch(() => ({}));
     if (!name || name.trim().length < 2) {
-      return res.status(400).json({ success: false, error: 'Nama minimal 2 karakter!' });
+      return c.json({ success: false, error: 'Nama minimal 2 karakter!' }, 400);
     }
     if (!code || code.trim().length !== 6) {
-      return res.status(400).json({ success: false, error: 'Kode room harus 6 huruf!' });
+      return c.json({ success: false, error: 'Kode room harus 6 huruf!' }, 400);
     }
 
     const safeSessionId = sessionId || `sess_${Math.random().toString(36).substring(2, 9)}`;
@@ -226,7 +237,7 @@ app.post('/api/rooms/join', (req, res) => {
       name
     });
 
-    if (result.error) return res.status(400).json({ success: false, error: result.error });
+    if (result.error) return c.json({ success: false, error: result.error }, 400);
 
     let gameStatePayload = {};
     if (result.room.status === 'PLAYING' && result.room.game) {
@@ -246,7 +257,7 @@ app.post('/api/rooms/join', (req, res) => {
 
     emitRealtime(result.room.code, 'room_updated', toPublicRoom(result.room));
 
-    res.json({
+    return c.json({
       success: true,
       room: toPublicRoom(result.room),
       player: { ...result.player, dbId: dbPlayer.id },
@@ -255,24 +266,24 @@ app.post('/api/rooms/join', (req, res) => {
     });
   } catch (err) {
     console.error('Error in /api/rooms/join:', err);
-    res.status(500).json({ success: false, error: 'Gagal bergabung ke room' });
+    return c.json({ success: false, error: 'Gagal bergabung ke room' }, 500);
   }
 });
 
-app.post('/api/rooms/rejoin', (req, res) => {
+app.post('/api/rooms/rejoin', async (c) => {
   try {
-    const { code, sessionId } = req.body || {};
+    const { code, sessionId } = await c.req.json().catch(() => ({}));
     if (!code || !sessionId) {
-      return res.status(400).json({ success: false, error: 'Kode atau sesi tidak valid' });
+      return c.json({ success: false, error: 'Kode atau sesi tidak valid' }, 400);
     }
     const room = roomManager.rooms.get(code.toUpperCase());
     if (!room) {
-      return res.status(404).json({ success: false, error: 'Room tidak ditemukan' });
+      return c.json({ success: false, error: 'Room tidak ditemukan' }, 404);
     }
 
-    const existingPlayer = room.players.find(p => p.id === sessionId);
+    const existingPlayer = room.players.find((p) => p.id === sessionId);
     if (!existingPlayer) {
-      return res.status(404).json({ success: false, error: 'Pemain tidak ditemukan di room ini' });
+      return c.json({ success: false, error: 'Pemain tidak ditemukan di room ini' }, 404);
     }
 
     existingPlayer.connected = true;
@@ -295,7 +306,7 @@ app.post('/api/rooms/rejoin', (req, res) => {
 
     emitRealtime(room.code, 'room_updated', toPublicRoom(room));
 
-    res.json({
+    return c.json({
       success: true,
       room: toPublicRoom(room),
       player: existingPlayer,
@@ -304,15 +315,15 @@ app.post('/api/rooms/rejoin', (req, res) => {
     });
   } catch (err) {
     console.error('Error in /api/rooms/rejoin:', err);
-    res.status(500).json({ success: false, error: 'Gagal menghubungkan ulang' });
+    return c.json({ success: false, error: 'Gagal menghubungkan ulang' }, 500);
   }
 });
 
-app.post('/api/rooms/start', (req, res) => {
+app.post('/api/rooms/start', async (c) => {
   try {
-    const { code, sessionId } = req.body || {};
+    const { code, sessionId } = await c.req.json().catch(() => ({}));
     const result = roomManager.startGame(code, sessionId);
-    if (result.error) return res.status(400).json({ success: false, error: result.error });
+    if (result.error) return c.json({ success: false, error: result.error }, 400);
 
     recordMatchStart(db, {
       roomCode: code,
@@ -321,7 +332,7 @@ app.post('/api/rooms/start', (req, res) => {
     });
 
     emitRealtime(result.room.code, 'game_started', {
-      players: result.room.players.map(p => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
+      players: result.room.players.map((p) => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
       tokens: result.room.game.tokens,
       activePlayer: result.room.game.currentTurnPlayer,
       currentTimer: result.room.game.currentTurnTimer,
@@ -330,22 +341,22 @@ app.post('/api/rooms/start', (req, res) => {
     });
     notifyTurnPaused(result.room);
 
-    res.json({ success: true });
+    return c.json({ success: true });
   } catch (err) {
     console.error('Error in /api/rooms/start:', err);
-    res.status(500).json({ success: false, error: 'Gagal memulai permainan' });
+    return c.json({ success: false, error: 'Gagal memulai permainan' }, 500);
   }
 });
 
-app.post('/api/rooms/spin', (req, res) => {
+app.post('/api/rooms/spin', async (c) => {
   try {
-    const { code, sessionId } = req.body || {};
+    const { code, sessionId } = await c.req.json().catch(() => ({}));
     const room = roomManager.rooms.get((code || '').toUpperCase());
-    if (!room || !room.game) return res.status(400).json({ error: 'Permainan tidak ditemukan!' });
+    if (!room || !room.game) return c.json({ error: 'Permainan tidak ditemukan!' }, 400);
 
     const activeId = room.game.currentTurnPlayer.id;
     if (activeId !== sessionId) {
-      return res.status(403).json({ error: 'Bukan giliranmu untuk roll dadu!' });
+      return c.json({ error: 'Bukan giliranmu untuk roll dadu!' }, 403);
     }
 
     const challenge = room.game.spinChallenge(sessionId);
@@ -358,22 +369,22 @@ app.post('/api/rooms/spin', (req, res) => {
     });
 
     startCountdownTimer(room);
-    res.json({ success: true, challenge });
+    return c.json({ success: true, challenge });
   } catch (err) {
     console.error('Error in /api/rooms/spin:', err);
-    res.status(500).json({ error: err.message || 'Gagal memutar dadu' });
+    return c.json({ error: err.message || 'Gagal memutar dadu' }, 500);
   }
 });
 
-app.post('/api/rooms/roll', (req, res) => {
+app.post('/api/rooms/roll', async (c) => {
   try {
-    const { code, sessionId, inputNumber } = req.body || {};
+    const { code, sessionId, inputNumber } = await c.req.json().catch(() => ({}));
     const room = roomManager.rooms.get((code || '').toUpperCase());
-    if (!room || !room.game) return res.status(400).json({ error: 'Permainan tidak ditemukan!' });
+    if (!room || !room.game) return c.json({ error: 'Permainan tidak ditemukan!' }, 400);
 
     const activeId = room.game.currentTurnPlayer.id;
     if (activeId !== sessionId) {
-      return res.status(403).json({ error: 'Bukan giliranmu untuk melempar!' });
+      return c.json({ error: 'Bukan giliranmu untuk melempar!' }, 403);
     }
 
     let challenge = room.game.currentChallenge;
@@ -389,9 +400,10 @@ app.post('/api/rooms/roll', (req, res) => {
     roomManager.stopTimer(room.code);
     room.timeLeft = null;
 
-    const safeInput = inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
-      ? Math.round(Number(inputNumber))
-      : Math.floor(Math.random() * 41) - 20;
+    const safeInput =
+      inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
+        ? Math.round(Number(inputNumber))
+        : Math.floor(Math.random() * 41) - 20;
 
     const roll = calculateRollWithInput({
       screenNumber: challenge.screenNumber,
@@ -441,21 +453,21 @@ app.post('/api/rooms/roll', (req, res) => {
       }, 2000);
     }
 
-    res.json({ success: true, roll });
+    return c.json({ success: true, roll });
   } catch (err) {
     console.error('Error in /api/rooms/roll:', err);
-    res.status(500).json({ error: 'Gagal melempar dadu' });
+    return c.json({ error: 'Gagal melempar dadu' }, 500);
   }
 });
 
-app.post('/api/rooms/move', (req, res) => {
+app.post('/api/rooms/move', async (c) => {
   try {
-    const { code, sessionId, tokenId } = req.body || {};
+    const { code, sessionId, tokenId } = await c.req.json().catch(() => ({}));
     const room = roomManager.rooms.get((code || '').toUpperCase());
-    if (!room || !room.game) return res.status(400).json({ success: false, error: 'Permainan tidak ditemukan!' });
+    if (!room || !room.game) return c.json({ success: false, error: 'Permainan tidak ditemukan!' }, 400);
 
     const moveRes = room.game.moveToken(sessionId, tokenId);
-    if (!moveRes.success) return res.status(400).json({ success: false, error: moveRes.reason });
+    if (!moveRes.success) return c.json({ success: false, error: moveRes.reason }, 400);
 
     if (moveRes.captured) {
       recordPlayerCapture(db, room.game.currentTurnPlayer.name);
@@ -488,431 +500,515 @@ app.post('/api/rooms/move', (req, res) => {
       });
     }
 
-    res.json({ success: true });
+    return c.json({ success: true });
   } catch (err) {
     console.error('Error in /api/rooms/move:', err);
-    res.status(500).json({ success: false, error: 'Gagal memindahkan bidak' });
+    return c.json({ success: false, error: 'Gagal memindahkan bidak' }, 500);
   }
 });
 
-app.post('/api/rooms/leave', (req, res) => {
+app.post('/api/rooms/leave', async (c) => {
   try {
-    const { sessionId } = req.body || {};
+    const { sessionId } = await c.req.json().catch(() => ({}));
     const left = roomManager.leave(sessionId);
     if (left) {
       emitRealtime(left.code, 'player_left', { sessionId, room: toPublicRoom(left.room) });
     }
-    res.json({ success: true });
+    return c.json({ success: true });
   } catch (err) {
     console.error('Error in /api/rooms/leave:', err);
-    res.status(500).json({ success: false });
+    return c.json({ success: false });
   }
 });
 
-app.get('/api/leaderboard', (req, res) => {
-  try {
-    const stats = getLeaderboard(db, 10);
-    res.json({ leaderboard: stats });
-  } catch (err) {
-    console.error('Error in /api/leaderboard:', err);
-    res.json({ leaderboard: [] });
-  }
-});
-
-// Socket.IO compatibility layer (keeps legacy sockets completely functional)
-io.on('connection', (socket) => {
-  socket.on('create_room', ({ name, timer, maxPlayers, sessionId }, callback) => {
-    try {
-      if (!name || name.trim().length < 2) {
-        return callback({ success: false, error: 'Nama minimal 2 karakter!' });
-      }
-      const safeSessionId = sessionId || `sess_${socket.id}`;
-      socket.data.sessionId = safeSessionId;
-
-      const dbPlayer = getOrCreatePlayer(db, name);
-      const safeTimer = Math.min(30, Math.max(10, Number(timer) || 30));
-      const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers });
-      const joinRes = roomManager.joinRoom({
-        code: room.code,
-        socketId: socket.id,
-        sessionId: safeSessionId,
-        name
-      });
-
-      socket.data.roomCode = room.code;
-      socket.join(room.code);
-      callback({
-        success: true,
-        room: toPublicRoom(joinRes.room),
-        player: { ...joinRes.player, dbId: dbPlayer.id }
-      });
-    } catch (err) {
-      console.error('Error in create_room:', err);
-      callback({ success: false, error: 'Terjadi kesalahan di server' });
-    }
-  });
-
-  socket.on('join_room', ({ code, name, sessionId }, callback) => {
-    try {
-      if (!name || name.trim().length < 2) {
-        return callback({ success: false, error: 'Nama minimal 2 karakter!' });
-      }
-      if (!code || code.trim().length !== 6) {
-        return callback({ success: false, error: 'Kode room harus 6 huruf!' });
-      }
-
-      const safeSessionId = sessionId || `sess_${socket.id}`;
-      socket.data.sessionId = safeSessionId;
-
-      const dbPlayer = getOrCreatePlayer(db, name);
-      const res = roomManager.joinRoom({
-        code: code.toUpperCase(),
-        socketId: socket.id,
-        sessionId: safeSessionId,
-        name
-      });
-      if (res.error) return callback({ success: false, error: res.error });
-
-      socket.data.roomCode = res.room.code;
-      socket.join(res.room.code);
-
-      let gameStatePayload = {};
-      if (res.room.status === 'PLAYING' && res.room.game) {
-        gameStatePayload = {
-          gameStarted: true,
-          tokens: res.room.game.tokens,
-          activePlayer: res.room.game.currentTurnPlayer,
-          currentTimer: res.room.game.currentTurnTimer,
-          currentChallenge: res.room.game.currentChallenge,
-          timeLeft: res.room.timeLeft ?? res.room.game.currentTurnTimer,
-          gameState: res.room.game.state,
-          currentRoll: res.room.game.pendingRoll,
-          validTokenIds: res.room.game.getValidMoves(safeSessionId),
-          winners: res.room.game.winners
-        };
-      }
-
-      emitRealtime(res.room.code, 'room_updated', toPublicRoom(res.room));
-      callback({
-        success: true,
-        room: toPublicRoom(res.room),
-        player: { ...res.player, dbId: dbPlayer.id },
-        isRejoin: res.isRejoin,
-        ...gameStatePayload
-      });
-    } catch (err) {
-      console.error('Error in join_room:', err);
-      callback({ success: false, error: 'Gagal memproses room' });
-    }
-  });
-
-  socket.on('rejoin_room', ({ code, sessionId }, callback) => {
-    try {
-      if (!code || !sessionId) {
-        return callback({ success: false, error: 'Kode atau sesi tidak valid' });
-      }
-      const room = roomManager.rooms.get(code.toUpperCase());
-      if (!room) {
-        return callback({ success: false, error: 'Room tidak ditemukan' });
-      }
-
-      const existingPlayer = room.players.find(p => p.id === sessionId);
-      if (!existingPlayer) {
-        return callback({ success: false, error: 'Pemain tidak ditemukan di room ini' });
-      }
-
-      existingPlayer.socketId = socket.id;
-      existingPlayer.connected = true;
-      socket.data.sessionId = sessionId;
-      socket.data.roomCode = room.code;
-      socket.join(room.code);
-
-      let gameStatePayload = {};
-      if (room.status === 'PLAYING' && room.game) {
-        gameStatePayload = {
-          gameStarted: true,
-          tokens: room.game.tokens,
-          activePlayer: room.game.currentTurnPlayer,
-          currentTimer: room.game.currentTurnTimer,
-          currentChallenge: room.game.currentChallenge,
-          timeLeft: room.timeLeft ?? room.game.currentTurnTimer,
-          gameState: room.game.state,
-          currentRoll: room.game.pendingRoll,
-          validTokenIds: room.game.getValidMoves(sessionId),
-          winners: room.game.winners
-        };
-      }
-
-      emitRealtime(room.code, 'room_updated', toPublicRoom(room));
-      callback({
-        success: true,
-        room: toPublicRoom(room),
-        player: existingPlayer,
-        isRejoin: true,
-        ...gameStatePayload
-      });
-    } catch (err) {
-      console.error('Error in rejoin_room:', err);
-      callback({ success: false, error: 'Gagal menghubungkan ulang' });
-    }
-  });
-
-  socket.on('start_game', ({ code }, callback) => {
-    try {
-      const res = roomManager.startGame(code, socket.data.sessionId || socket.id);
-      if (res.error) return callback({ success: false, error: res.error });
-
-      recordMatchStart(db, {
-        roomCode: code,
-        timer: res.room.defaultTimer,
-        maxPlayers: res.room.maxPlayers
-      });
-
-      emitRealtime(res.room.code, 'game_started', {
-        players: res.room.players.map(p => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
-        tokens: res.room.game.tokens,
-        activePlayer: res.room.game.currentTurnPlayer,
-        currentTimer: res.room.game.currentTurnTimer,
-        currentChallenge: null,
-        gameState: 'WAITING_FOR_ROLL'
-      });
-      notifyTurnPaused(res.room);
-      callback({ success: true });
-    } catch (err) {
-      console.error('Error in start_game:', err);
-      callback({ success: false, error: 'Gagal memulai permainan' });
-    }
-  });
-
-  socket.on('spin_dice', ({ code }, callback) => {
-    try {
-      const room = roomManager.rooms.get((code || '').toUpperCase());
-      if (!room || !room.game) return callback?.({ error: 'Permainan tidak ditemukan!' });
-
-      const activeId = room.game.currentTurnPlayer.id;
-      const callerId = socket.data.sessionId || socket.id;
-
-      if (activeId !== callerId) {
-        return callback?.({ error: 'Bukan giliranmu untuk roll dadu!' });
-      }
-
-      const challenge = room.game.spinChallenge(callerId);
-      emitRealtime(room.code, 'challenge_ready', {
-        activePlayer: room.game.currentTurnPlayer,
-        activePlayerId: activeId,
-        currentChallenge: challenge,
-        timeLeft: room.game.currentTurnTimer,
-        currentTimer: room.game.currentTurnTimer
-      });
-
-      startCountdownTimer(room);
-      callback?.({ success: true, challenge });
-    } catch (err) {
-      console.error('Error in spin_dice:', err);
-      callback?.({ error: err.message || 'Gagal memutar dadu' });
-    }
-  });
-
-  socket.on('roll_dice', ({ code, inputNumber }, callback) => {
-    try {
-      const room = roomManager.rooms.get((code || '').toUpperCase());
-      if (!room || !room.game) return callback({ error: 'Permainan tidak ditemukan!' });
-
-      const activeId = room.game.currentTurnPlayer.id;
-      const callerId = socket.data.sessionId || socket.id;
-
-      if (activeId !== callerId) {
-        return callback({ error: 'Bukan giliranmu untuk melempar!' });
-      }
-
-      let challenge = room.game.currentChallenge;
-      if (!challenge) {
-        challenge = room.game.spinChallenge(callerId);
-        emitRealtime(room.code, 'challenge_ready', {
-          activePlayer: room.game.currentTurnPlayer,
-          activePlayerId: activeId,
-          currentChallenge: challenge
+// Hono WebSocket Endpoint (/ws)
+app.get(
+  '/ws',
+  upgradeWebSocket(() => {
+    return {
+      onOpen(event, ws) {
+        const socketId = `ws_${Math.random().toString(36).substring(2, 9)}`;
+        socketMeta.set(ws.raw, {
+          id: socketId,
+          sessionId: null,
+          roomCode: null,
+          ws
         });
+        ws.send(JSON.stringify({ event: 'connected', data: { socketId } }));
+      },
+      onMessage(event, ws) {
+        let msg = {};
+        try {
+          msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        } catch (e) {
+          return;
+        }
+
+        const { event: evName, data = {}, ackId } = msg;
+        const meta = socketMeta.get(ws.raw) || { id: `ws_${Math.random().toString(36).substring(2, 9)}`, ws };
+        const socketId = meta.id;
+
+        function replyAck(res) {
+          if (ackId) {
+            ws.send(JSON.stringify({ ackId, response: res }));
+          }
+        }
+
+        if (evName === 'ping') {
+          ws.send(JSON.stringify({ event: 'pong' }));
+          return;
+        }
+
+        if (evName === 'subscribe_room') {
+          const { code, sessionId } = data;
+          if (code) {
+            const cleanCode = code.toUpperCase();
+            ws.raw.subscribe(roomTopic(cleanCode));
+            meta.roomCode = cleanCode;
+            if (sessionId) meta.sessionId = sessionId;
+            socketMeta.set(ws.raw, meta);
+          }
+          replyAck({ success: true });
+          return;
+        }
+
+        if (evName === 'create_room') {
+          try {
+            const { name, timer, maxPlayers, sessionId } = data;
+            if (!name || name.trim().length < 2) {
+              return replyAck({ success: false, error: 'Nama minimal 2 karakter!' });
+            }
+            const safeSessionId = sessionId || meta.sessionId || `sess_${socketId}`;
+            meta.sessionId = safeSessionId;
+
+            const dbPlayer = getOrCreatePlayer(db, name);
+            const safeTimer = Math.min(30, Math.max(10, Number(timer) || 30));
+            const room = roomManager.createRoom({ hostName: name, defaultTimer: safeTimer, maxPlayers });
+            const joinRes = roomManager.joinRoom({
+              code: room.code,
+              socketId: safeSessionId,
+              sessionId: safeSessionId,
+              name
+            });
+
+            meta.roomCode = room.code;
+            ws.raw.subscribe(roomTopic(room.code));
+            socketMeta.set(ws.raw, meta);
+
+            replyAck({
+              success: true,
+              room: toPublicRoom(joinRes.room),
+              player: { ...joinRes.player, dbId: dbPlayer.id }
+            });
+          } catch (err) {
+            console.error('WS Error in create_room:', err);
+            replyAck({ success: false, error: 'Terjadi kesalahan di server' });
+          }
+          return;
+        }
+
+        if (evName === 'join_room') {
+          try {
+            const { code, name, sessionId } = data;
+            if (!name || name.trim().length < 2) {
+              return replyAck({ success: false, error: 'Nama minimal 2 karakter!' });
+            }
+            if (!code || code.trim().length !== 6) {
+              return replyAck({ success: false, error: 'Kode room harus 6 huruf!' });
+            }
+
+            const safeSessionId = sessionId || meta.sessionId || `sess_${socketId}`;
+            meta.sessionId = safeSessionId;
+
+            const dbPlayer = getOrCreatePlayer(db, name);
+            const res = roomManager.joinRoom({
+              code: code.toUpperCase(),
+              socketId: safeSessionId,
+              sessionId: safeSessionId,
+              name
+            });
+            if (res.error) return replyAck({ success: false, error: res.error });
+
+            meta.roomCode = res.room.code;
+            ws.raw.subscribe(roomTopic(res.room.code));
+            socketMeta.set(ws.raw, meta);
+
+            let gameStatePayload = {};
+            if (res.room.status === 'PLAYING' && res.room.game) {
+              gameStatePayload = {
+                gameStarted: true,
+                tokens: res.room.game.tokens,
+                activePlayer: res.room.game.currentTurnPlayer,
+                currentTimer: res.room.game.currentTurnTimer,
+                currentChallenge: res.room.game.currentChallenge,
+                timeLeft: res.room.timeLeft ?? res.room.game.currentTurnTimer,
+                gameState: res.room.game.state,
+                currentRoll: res.room.game.pendingRoll,
+                validTokenIds: res.room.game.getValidMoves(safeSessionId),
+                winners: res.room.game.winners
+              };
+            }
+
+            emitRealtime(res.room.code, 'room_updated', toPublicRoom(res.room));
+            replyAck({
+              success: true,
+              room: toPublicRoom(res.room),
+              player: { ...res.player, dbId: dbPlayer.id },
+              isRejoin: res.isRejoin,
+              ...gameStatePayload
+            });
+          } catch (err) {
+            console.error('WS Error in join_room:', err);
+            replyAck({ success: false, error: 'Gagal memproses room' });
+          }
+          return;
+        }
+
+        if (evName === 'rejoin_room') {
+          try {
+            const { code, sessionId } = data;
+            if (!code || !sessionId) {
+              return replyAck({ success: false, error: 'Kode atau sesi tidak valid' });
+            }
+            const room = roomManager.rooms.get(code.toUpperCase());
+            if (!room) {
+              return replyAck({ success: false, error: 'Room tidak ditemukan' });
+            }
+
+            const existingPlayer = room.players.find((p) => p.id === sessionId);
+            if (!existingPlayer) {
+              return replyAck({ success: false, error: 'Pemain tidak ditemukan di room ini' });
+            }
+
+            existingPlayer.socketId = socketId;
+            existingPlayer.connected = true;
+            meta.sessionId = sessionId;
+            meta.roomCode = room.code;
+            ws.raw.subscribe(roomTopic(room.code));
+            socketMeta.set(ws.raw, meta);
+
+            let gameStatePayload = {};
+            if (room.status === 'PLAYING' && room.game) {
+              gameStatePayload = {
+                gameStarted: true,
+                tokens: room.game.tokens,
+                activePlayer: room.game.currentTurnPlayer,
+                currentTimer: room.game.currentTurnTimer,
+                currentChallenge: room.game.currentChallenge,
+                timeLeft: room.timeLeft ?? room.game.currentTurnTimer,
+                gameState: room.game.state,
+                currentRoll: room.game.pendingRoll,
+                validTokenIds: room.game.getValidMoves(sessionId),
+                winners: room.game.winners
+              };
+            }
+
+            emitRealtime(room.code, 'room_updated', toPublicRoom(room));
+            replyAck({
+              success: true,
+              room: toPublicRoom(room),
+              player: existingPlayer,
+              isRejoin: true,
+              ...gameStatePayload
+            });
+          } catch (err) {
+            console.error('WS Error in rejoin_room:', err);
+            replyAck({ success: false, error: 'Gagal menghubungkan ulang' });
+          }
+          return;
+        }
+
+        if (evName === 'start_game') {
+          try {
+            const { code } = data;
+            const res = roomManager.startGame(code, meta.sessionId || socketId);
+            if (res.error) return replyAck({ success: false, error: res.error });
+
+            recordMatchStart(db, {
+              roomCode: code,
+              timer: res.room.defaultTimer,
+              maxPlayers: res.room.maxPlayers
+            });
+
+            emitRealtime(res.room.code, 'game_started', {
+              players: res.room.players.map((p) => ({ id: p.id, name: p.name, color: p.color, isHost: p.isHost })),
+              tokens: res.room.game.tokens,
+              activePlayer: res.room.game.currentTurnPlayer,
+              currentTimer: res.room.game.currentTurnTimer,
+              currentChallenge: null,
+              gameState: 'WAITING_FOR_ROLL'
+            });
+            notifyTurnPaused(res.room);
+            replyAck({ success: true });
+          } catch (err) {
+            console.error('WS Error in start_game:', err);
+            replyAck({ success: false, error: 'Gagal memulai permainan' });
+          }
+          return;
+        }
+
+        if (evName === 'spin_dice') {
+          try {
+            const { code } = data;
+            const room = roomManager.rooms.get((code || '').toUpperCase());
+            if (!room || !room.game) return replyAck({ error: 'Permainan tidak ditemukan!' });
+
+            const activeId = room.game.currentTurnPlayer.id;
+            const callerId = meta.sessionId || socketId;
+            if (activeId !== callerId) {
+              return replyAck({ error: 'Bukan giliranmu untuk roll dadu!' });
+            }
+
+            const challenge = room.game.spinChallenge(callerId);
+            emitRealtime(room.code, 'challenge_ready', {
+              activePlayer: room.game.currentTurnPlayer,
+              activePlayerId: activeId,
+              currentChallenge: challenge,
+              timeLeft: room.game.currentTurnTimer,
+              currentTimer: room.game.currentTurnTimer
+            });
+
+            startCountdownTimer(room);
+            replyAck({ success: true, challenge });
+          } catch (err) {
+            console.error('WS Error in spin_dice:', err);
+            replyAck({ error: err.message || 'Gagal memutar dadu' });
+          }
+          return;
+        }
+
+        if (evName === 'roll_dice') {
+          try {
+            const { code, inputNumber } = data;
+            const room = roomManager.rooms.get((code || '').toUpperCase());
+            if (!room || !room.game) return replyAck({ error: 'Permainan tidak ditemukan!' });
+
+            const activeId = room.game.currentTurnPlayer.id;
+            const callerId = meta.sessionId || socketId;
+            if (activeId !== callerId) {
+              return replyAck({ error: 'Bukan giliranmu untuk melempar!' });
+            }
+
+            let challenge = room.game.currentChallenge;
+            if (!challenge) {
+              challenge = room.game.spinChallenge(callerId);
+              emitRealtime(room.code, 'challenge_ready', {
+                activePlayer: room.game.currentTurnPlayer,
+                activePlayerId: activeId,
+                currentChallenge: challenge
+              });
+            }
+
+            roomManager.stopTimer(room.code);
+            room.timeLeft = null;
+
+            const safeInput =
+              inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
+                ? Math.round(Number(inputNumber))
+                : Math.floor(Math.random() * 41) - 20;
+
+            const roll = calculateRollWithInput({
+              screenNumber: challenge.screenNumber,
+              op: challenge.op,
+              userInput: safeInput
+            });
+
+            const rollMeta = room.game.applyRoll(roll);
+
+            recordRollLog(db, {
+              roomCode: room.code,
+              playerName: room.game.currentTurnPlayer.name,
+              ...roll
+            });
+
+            emitRealtime(room.code, 'dice_rolled', {
+              roll,
+              validTokenIds: rollMeta.validTokenIds,
+              autoSkip: rollMeta.autoSkip,
+              penalty: rollMeta.penalty,
+              activePlayer: room.game.currentTurnPlayer
+            });
+
+            emitRealtime(room.code, 'timer_tick', {
+              timeLeft: null,
+              totalTimer: room.game.currentTurnTimer,
+              activePlayerId: activeId,
+              currentChallenge: challenge,
+              gameState: room.game.state,
+              tokens: room.game.tokens,
+              validTokenIds: rollMeta.validTokenIds,
+              isPaused: true
+            });
+
+            if (rollMeta.autoSkip) {
+              setTimeout(() => {
+                room.game.nextTurn();
+                room.timeLeft = room.game.currentTurnTimer;
+                emitRealtime(room.code, 'turn_passed', {
+                  activePlayer: room.game.currentTurnPlayer,
+                  nextPlayer: room.game.currentTurnPlayer,
+                  currentTimer: room.game.currentTurnTimer,
+                  currentChallenge: null,
+                  gameState: room.game.state
+                });
+                notifyTurnPaused(room);
+              }, 2000);
+            }
+
+            replyAck({ success: true, roll });
+          } catch (err) {
+            console.error('WS Error in roll_dice:', err);
+            replyAck({ error: 'Gagal melempar dadu' });
+          }
+          return;
+        }
+
+        if (evName === 'move_token') {
+          try {
+            const { code, tokenId } = data;
+            const room = roomManager.rooms.get((code || '').toUpperCase());
+            if (!room || !room.game) return replyAck({ success: false, error: 'Permainan tidak ditemukan!' });
+
+            const callerId = meta.sessionId || socketId;
+            const moveRes = room.game.moveToken(callerId, tokenId);
+            if (!moveRes.success) return replyAck({ success: false, error: moveRes.reason });
+
+            if (moveRes.captured) {
+              recordPlayerCapture(db, room.game.currentTurnPlayer.name);
+            }
+
+            if (moveRes.finished) {
+              recordMatchWin(db, code, room.game.currentTurnPlayer.name);
+            }
+
+            emitRealtime(room.code, 'token_moved', {
+              playerId: callerId,
+              tokenId,
+              tokens: room.game.tokens,
+              captured: moveRes.captured,
+              extraTurn: moveRes.extraTurn,
+              activePlayer: room.game.currentTurnPlayer,
+              currentTimer: room.game.currentTurnTimer,
+              currentChallenge: room.game.currentChallenge,
+              finished: moveRes.finished,
+              winners: room.game.winners,
+              gameState: room.game.state
+            });
+
+            if (!moveRes.finished) {
+              notifyTurnPaused(room);
+            } else {
+              roomManager.stopTimer(room.code);
+              emitRealtime(room.code, 'game_over', {
+                winners: room.game.winners
+              });
+            }
+
+            replyAck({ success: true });
+          } catch (err) {
+            console.error('WS Error in move_token:', err);
+            replyAck({ success: false, error: 'Gagal memindahkan bidak' });
+          }
+          return;
+        }
+
+        if (evName === 'get_leaderboard') {
+          try {
+            const stats = getLeaderboard(db, 10);
+            replyAck({ leaderboard: stats });
+          } catch (err) {
+            console.error('WS Error in get_leaderboard:', err);
+            replyAck({ leaderboard: [] });
+          }
+          return;
+        }
+
+        if (evName === 'leave_room') {
+          try {
+            const callerId = meta.sessionId || socketId;
+            const left = roomManager.leave(callerId);
+            if (left) {
+              emitRealtime(left.code, 'player_left', { sessionId: callerId, room: toPublicRoom(left.room) });
+            }
+            replyAck({ success: true });
+          } catch (err) {
+            console.error('WS Error in leave_room:', err);
+            replyAck({ success: false });
+          }
+          return;
+        }
+      },
+      onClose(event, ws) {
+        const meta = socketMeta.get(ws.raw);
+        if (meta) {
+          const socketId = meta.id;
+          try {
+            const left = roomManager.handleDisconnect(socketId);
+            if (left) {
+              emitRealtime(left.code, 'player_connection_change', {
+                player: {
+                  id: left.player.id,
+                  name: left.player.name,
+                  color: left.player.color,
+                  isHost: left.player.isHost,
+                  connected: left.player.connected
+                },
+                room: toPublicRoom(left.room)
+              });
+            }
+          } catch (err) {
+            console.error('WS Error in onClose:', err);
+          }
+          socketMeta.delete(ws.raw);
+        }
       }
+    };
+  })
+);
 
-      roomManager.stopTimer(room.code);
-      room.timeLeft = null;
-
-      const safeInput = inputNumber !== undefined && inputNumber !== null && !isNaN(Number(inputNumber))
-        ? Math.round(Number(inputNumber))
-        : Math.floor(Math.random() * 41) - 20;
-
-      const roll = calculateRollWithInput({
-        screenNumber: challenge.screenNumber,
-        op: challenge.op,
-        userInput: safeInput
-      });
-
-      const rollMeta = room.game.applyRoll(roll);
-
-      recordRollLog(db, {
-        roomCode: room.code,
-        playerName: room.game.currentTurnPlayer.name,
-        ...roll
-      });
-
-      emitRealtime(room.code, 'dice_rolled', {
-        roll,
-        validTokenIds: rollMeta.validTokenIds,
-        autoSkip: rollMeta.autoSkip,
-        penalty: rollMeta.penalty,
-        activePlayer: room.game.currentTurnPlayer
-      });
-
-      emitRealtime(room.code, 'timer_tick', {
-        timeLeft: null,
-        totalTimer: room.game.currentTurnTimer,
-        activePlayerId: activeId,
-        currentChallenge: challenge,
-        gameState: room.game.state,
-        tokens: room.game.tokens,
-        validTokenIds: rollMeta.validTokenIds,
-        isPaused: true
-      });
-
-      if (rollMeta.autoSkip) {
-        setTimeout(() => {
-          room.game.nextTurn();
-          room.timeLeft = room.game.currentTurnTimer;
-          emitRealtime(room.code, 'turn_passed', {
-            activePlayer: room.game.currentTurnPlayer,
-            nextPlayer: room.game.currentTurnPlayer,
-            currentTimer: room.game.currentTurnTimer,
-            currentChallenge: null,
-            gameState: room.game.state
-          });
-          notifyTurnPaused(room);
-        }, 2000);
-      }
-
-      callback({ success: true, roll });
-    } catch (err) {
-      console.error('Error in roll_dice:', err);
-      callback({ error: 'Gagal melempar dadu' });
-    }
-  });
-
-  socket.on('move_token', ({ code, tokenId }, callback) => {
-    try {
-      const room = roomManager.rooms.get((code || '').toUpperCase());
-      if (!room || !room.game) return callback({ success: false, error: 'Permainan tidak ditemukan!' });
-
-      const callerId = socket.data.sessionId || socket.id;
-      const moveRes = room.game.moveToken(callerId, tokenId);
-      if (!moveRes.success) return callback({ success: false, error: moveRes.reason });
-
-      if (moveRes.captured) {
-        recordPlayerCapture(db, room.game.currentTurnPlayer.name);
-      }
-
-      if (moveRes.finished) {
-        recordMatchWin(db, code, room.game.currentTurnPlayer.name);
-      }
-
-      emitRealtime(room.code, 'token_moved', {
-        playerId: callerId,
-        tokenId,
-        tokens: room.game.tokens,
-        captured: moveRes.captured,
-        extraTurn: moveRes.extraTurn,
-        activePlayer: room.game.currentTurnPlayer,
-        currentTimer: room.game.currentTurnTimer,
-        currentChallenge: room.game.currentChallenge,
-        finished: moveRes.finished,
-        winners: room.game.winners,
-        gameState: room.game.state
-      });
-
-      if (!moveRes.finished) {
-        notifyTurnPaused(room);
-      } else {
-        roomManager.stopTimer(room.code);
-        emitRealtime(room.code, 'game_over', {
-          winners: room.game.winners
-        });
-      }
-
-      callback({ success: true });
-    } catch (err) {
-      console.error('Error in move_token:', err);
-      callback({ success: false, error: 'Gagal memindahkan bidak' });
-    }
-  });
-
-  socket.on('get_leaderboard', (callback) => {
-    try {
-      const stats = getLeaderboard(db, 10);
-      callback({ leaderboard: stats });
-    } catch (err) {
-      console.error('Error getting leaderboard:', err);
-      callback({ leaderboard: [] });
-    }
-  });
-
-  socket.on('leave_room', ({ code }, callback) => {
-    try {
-      const callerId = socket.data.sessionId || socket.id;
-      const left = roomManager.leave(callerId);
-      if (left) {
-        emitRealtime(left.code, 'player_left', { sessionId: callerId, room: toPublicRoom(left.room) });
-      }
-      if (callback) callback({ success: true });
-    } catch (err) {
-      console.error('Error in leave_room:', err);
-      if (callback) callback({ success: false });
-    }
-  });
-
-  socket.on('disconnect', () => {
-    try {
-      const left = roomManager.handleDisconnect(socket.id);
-      if (left) {
-        emitRealtime(left.code, 'player_connection_change', {
-          player: {
-            id: left.player.id,
-            name: left.player.name,
-            color: left.player.color,
-            isHost: left.player.isHost,
-            connected: left.player.connected
-          },
-          room: toPublicRoom(left.room)
-        });
-      }
-    } catch (err) {
-      console.error('Error in disconnect handler:', err);
-    }
-  });
-});
-
+// Serve SvelteKit SSR build in production or placeholder
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Serve SvelteKit SSR build in production or placeholder in dev
 const buildHandlerPath = path.resolve(__dirname, '../build/handler.js');
+
+let svelteKitHandler = null;
 if (fs.existsSync(buildHandlerPath)) {
-  const { handler } = await import(buildHandlerPath);
-  app.use(handler);
-} else {
-  app.use(express.static('static'));
-  app.get('/api/health', (req, res) => {
-    res.json({ ok: true, message: 'Server is running' });
+  try {
+    const sveltekit = await import(buildHandlerPath);
+    if (typeof sveltekit.getHandler === 'function') {
+      const { fetch: skFetch } = sveltekit.getHandler();
+      svelteKitHandler = skFetch;
+    }
+  } catch (err) {
+    console.error('Could not load SvelteKit handler:', err);
+  }
+}
+
+if (svelteKitHandler) {
+  app.all('*', async (c) => {
+    const res = await svelteKitHandler(c.req.raw);
+    if (res) return res;
+    return c.notFound();
   });
-  app.get('*', (req, res) => {
-    res.send(`<!DOCTYPE html>
+} else {
+  app.get('*', (c) => {
+    return c.html(`<!DOCTYPE html>
 <html>
   <head><title>SalisLudo</title></head>
   <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-    <h1>SalisLudo Server Ready</h1>
-    <p>Run <code>npm run build</code> to compile the SvelteKit frontend.</p>
+    <h1>SalisLudo Server Ready (Bun + Hono)</h1>
+    <p>Run <code>bun run build</code> to compile the SvelteKit frontend.</p>
   </body>
 </html>`);
   });
 }
 
-server.listen(PORT, HOST, () => {
-  console.log(`SalisLudo Server running on http://${HOST}:${PORT}`);
+// Start Bun native HTTP & WebSocket server
+bunServer = Bun.serve({
+  port: PORT,
+  hostname: HOST,
+  fetch: app.fetch,
+  websocket
 });
+
+console.log(`SalisLudo Server running on http://${HOST}:${PORT} (Bun + Hono + WebSocket)`);
+export default bunServer;
