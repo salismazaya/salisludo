@@ -257,7 +257,9 @@ app.post('/api/rooms/join', async (c) => {
       };
     }
 
-    emitRealtime(result.room.code, 'room_updated', toPublicRoom(result.room));
+    const publicRoom = toPublicRoom(result.room);
+    emitRealtime(result.room.code, 'player_joined', { room: publicRoom, player: result.player });
+    emitRealtime(result.room.code, 'room_updated', publicRoom);
 
     return c.json({
       success: true,
@@ -653,7 +655,9 @@ app.get(
               };
             }
 
-            emitRealtime(res.room.code, 'room_updated', toPublicRoom(res.room));
+            const publicRoom = toPublicRoom(res.room);
+            emitRealtime(res.room.code, 'player_joined', { room: publicRoom, player: res.player });
+            emitRealtime(res.room.code, 'room_updated', publicRoom);
             replyAck({
               success: true,
               room: toPublicRoom(res.room),

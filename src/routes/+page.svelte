@@ -34,18 +34,59 @@
   // Sound toggle
   let soundEnabled = $state(true);
 
+  // Fullscreen & Orientation state
+  let isFullscreen = $state(false);
+  let isPortrait = $state(false);
+
+  async function requestLandscapeFullscreen() {
+    if (typeof window === 'undefined') return;
+    try {
+      const docEl = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (docEl.requestFullscreen) {
+          await docEl.requestFullscreen({ navigationUI: 'hide' });
+        } else if (docEl.webkitRequestFullscreen) {
+          await docEl.webkitRequestFullscreen();
+        }
+      }
+    } catch {}
+
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch {}
+  }
+
+  async function toggleFullscreen() {
+    if (typeof window === 'undefined') return;
+    try {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        await requestLandscapeFullscreen();
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          await document.webkitExitFullscreen();
+        }
+      }
+    } catch {}
+  }
+
   // Central Realtime Event Handler (handles Pusher events & Socket.IO fallback)
   function handleGameEvent(eventName, data) {
     if (!data) return;
 
     switch (eventName) {
       case 'room_updated':
-        currentRoom = data;
+        currentRoom = data.room || data;
         break;
 
       case 'player_joined':
         currentRoom = data.room || data;
-        if (soundEnabled) sounds.playJoin();
+        if (soundEnabled) {
+          try { sounds.playJoin(); } catch {}
+        }
         break;
 
       case 'player_left':
@@ -58,6 +99,7 @@
 
       case 'game_started':
         gameView = 'PLAYING';
+        requestLandscapeFullscreen();
         tokens = data.tokens || {};
         activePlayer = data.activePlayer;
         totalTimer = data.currentTimer || 30;
@@ -67,7 +109,9 @@
         currentRoll = null;
         validTokenIds = [];
         winners = [];
-        if (soundEnabled) sounds.playStart();
+        if (soundEnabled) {
+          try { sounds.playStart(); } catch {}
+        }
         break;
 
       case 'timer_tick':
@@ -80,7 +124,7 @@
         if (data.tokens) tokens = data.tokens;
         if (data.validTokenIds) validTokenIds = data.validTokenIds;
         if (soundEnabled && timeLeft <= 2 && timeLeft > 0) {
-          sounds.playTick();
+          try { sounds.playTick(); } catch {}
         }
         break;
 
@@ -97,7 +141,9 @@
         validTokenIds = data.validTokenIds || [];
         if (data.activePlayer) activePlayer = data.activePlayer;
         gameState = 'WAITING_FOR_MOVE';
-        if (soundEnabled) sounds.playRoll();
+        if (soundEnabled) {
+          try { sounds.playRoll(); } catch {}
+        }
         break;
 
       case 'token_moved':
@@ -111,9 +157,11 @@
         totalTimer = data.currentTimer ?? 30;
 
         if (soundEnabled) {
-          if (data.captured) sounds.playCapture();
-          else if (data.reachedHome) sounds.playHome();
-          else sounds.playMove();
+          try {
+            if (data.captured) sounds.playCapture();
+            else if (data.reachedHome) sounds.playHome();
+            else sounds.playMove();
+          } catch {}
         }
         break;
 
@@ -132,7 +180,9 @@
       case 'game_over':
         gameView = 'FINISHED';
         winners = data.winners || [];
-        if (soundEnabled) sounds.playWin();
+        if (soundEnabled) {
+          try { sounds.playWin(); } catch {}
+        }
         break;
     }
   }
@@ -226,8 +276,24 @@
       });
     }
 
+    function updateOrientationState() {
+      if (typeof window === 'undefined') return;
+      isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      isPortrait = window.innerHeight > window.innerWidth;
+    }
+
+    updateOrientationState();
+    window.addEventListener('resize', updateOrientationState);
+    window.addEventListener('orientationchange', updateOrientationState);
+    document.addEventListener('fullscreenchange', updateOrientationState);
+    document.addEventListener('webkitfullscreenchange', updateOrientationState);
+
     return () => {
       unsubscribeRealtime();
+      window.removeEventListener('resize', updateOrientationState);
+      window.removeEventListener('orientationchange', updateOrientationState);
+      document.removeEventListener('fullscreenchange', updateOrientationState);
+      document.removeEventListener('webkitfullscreenchange', updateOrientationState);
     };
   });
 
@@ -277,6 +343,7 @@
 
         if (res.gameStarted) {
           gameView = 'PLAYING';
+          requestLandscapeFullscreen();
           tokens = res.tokens || {};
           activePlayer = res.activePlayer;
           totalTimer = res.currentTimer || 30;
@@ -299,6 +366,7 @@
 
   async function handleStartGame() {
     if (!currentRoom) return;
+    requestLandscapeFullscreen();
     await fetch('/api/rooms/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -370,12 +438,20 @@
   <title>SalisLudo - Neobrutalism Math Game</title>
 </svelte:head>
 
-<main class="min-h-screen bg-white text-black flex flex-col justify-between p-3 sm:p-6 font-sans">
+<main
+  class="{gameView === 'PLAYING'
+    ? 'h-screen max-h-screen w-screen max-w-screen overflow-hidden p-1.5 sm:p-2'
+    : 'min-h-screen p-3 sm:p-6'} bg-white text-black flex flex-col justify-between font-sans select-none"
+>
   <!-- Navigation Header Neobrutalist -->
-  <header class="max-w-5xl w-full mx-auto flex items-center justify-between p-3 bg-white border-4 border-black shadow-[5px_5px_0px_#000] mb-5">
-    <div class="flex items-center gap-2.5">
-      <div class="w-9 h-9 bg-[#FFE600] text-black flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_#000]">
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+  <header
+    class="{gameView === 'PLAYING'
+      ? 'w-full flex items-center justify-between px-2.5 py-1 bg-white border-2 sm:border-3 border-black shadow-[2px_2px_0px_#000] mb-1 flex-shrink-0'
+      : 'max-w-5xl w-full mx-auto flex items-center justify-between p-3 bg-white border-4 border-black shadow-[5px_5px_0px_#000] mb-5'}"
+  >
+    <div class="flex items-center gap-2 sm:gap-2.5">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 bg-[#FFE600] text-black flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_#000]">
+        <svg class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <rect width="18" height="18" x="3" y="3" rx="0" />
           <path d="M8 8h.01" />
           <path d="M12 12h.01" />
@@ -384,41 +460,74 @@
           <path d="M8 16h.01" />
         </svg>
       </div>
-      <span class="font-black text-lg sm:text-xl tracking-tight text-black uppercase">
-        SalisLudo
-      </span>
+      <div class="flex items-center gap-2">
+        <span class="font-black text-base sm:text-lg tracking-tight text-black uppercase">
+          SalisLudo
+        </span>
+        {#if currentRoom && gameView === 'PLAYING'}
+          <span class="text-[10px] font-mono font-black bg-slate-100 border border-black px-1.5 py-0.5">
+            ROOM: {currentRoom.code}
+          </span>
+        {/if}
+      </div>
     </div>
 
-    <div class="flex items-center gap-2 sm:gap-3">
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <!-- Fullscreen Toggle Button -->
       <button
-        onclick={openLeaderboard}
-        class="text-xs px-3 py-1.5 bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] text-black font-black uppercase tracking-wider transition flex items-center gap-1.5"
+        onclick={toggleFullscreen}
+        class="text-xs p-1.5 sm:p-2 bg-white hover:bg-slate-100 active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] text-black transition cursor-pointer"
+        title={isFullscreen ? 'Keluar Fullscreen' : 'Layar Penuh (Landscape)'}
+        aria-label={isFullscreen ? 'Keluar Fullscreen' : 'Layar Penuh (Landscape)'}
       >
-        <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-          <path d="M4 22h16" />
-          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-        </svg>
-        <span>Peringkat</span>
+        {#if isFullscreen}
+          <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 14 10 14 10 20" />
+            <polyline points="20 10 14 10 14 4" />
+            <line x1="14" y1="10" x2="21" y2="3" />
+            <line x1="3" y1="21" x2="10" y2="14" />
+          </svg>
+        {:else}
+          <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 3 21 3 21 9" />
+            <polyline points="9 21 3 21 3 15" />
+            <line x1="21" y1="3" x2="14" y2="10" />
+            <line x1="3" y1="21" x2="10" y2="14" />
+          </svg>
+        {/if}
       </button>
+
+      {#if gameView === 'LOBBY'}
+        <button
+          onclick={openLeaderboard}
+          class="text-xs px-2.5 py-1.5 bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] text-black font-black uppercase tracking-wider transition flex items-center gap-1 cursor-pointer"
+        >
+          <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+            <path d="M4 22h16" />
+            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+          </svg>
+          <span class="hidden sm:inline">Peringkat</span>
+        </button>
+      {/if}
 
       <button
         onclick={() => (soundEnabled = !soundEnabled)}
-        class="text-xs p-2 bg-white hover:bg-slate-100 active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] text-black transition"
+        class="text-xs p-1.5 sm:p-2 bg-white hover:bg-slate-100 active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] text-black transition cursor-pointer"
         title={soundEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
         aria-label={soundEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
       >
         {#if soundEnabled}
-          <svg class="w-4 h-4 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
             <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
           </svg>
         {:else}
-          <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
             <line x1="23" y1="9" x2="17" y2="15" />
             <line x1="17" y1="9" x2="23" y2="15" />
@@ -429,7 +538,7 @@
       {#if gameView !== 'LOBBY'}
         <button
           onclick={leaveGame}
-          class="text-xs px-3 py-1.5 bg-[#FF6B6B] hover:bg-[#EE5253] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] text-black font-black uppercase tracking-wider transition"
+          class="text-xs px-2.5 py-1 bg-[#FF6B6B] hover:bg-[#EE5253] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[1.5px_1.5px_0px_#000] text-black font-black uppercase tracking-wider transition cursor-pointer"
         >
           Keluar
         </button>
@@ -438,7 +547,7 @@
   </header>
 
   <!-- Body Content -->
-  <div class="flex-1 flex flex-col items-center justify-center w-full max-w-7xl mx-auto space-y-4">
+  <div class="flex-1 min-h-0 w-full flex flex-col items-center justify-center overflow-hidden">
     {#if isRestoringSession}
       <div class="p-8 text-center text-black bg-white border-4 border-black shadow-[6px_6px_0px_#000] space-y-3">
         <div class="w-8 h-8 mx-auto animate-spin text-black">
@@ -461,11 +570,11 @@
         onShowLeaderboard={openLeaderboard}
       />
     {:else if gameView === 'PLAYING'}
-      <!-- Landscape & Desktop: Kiri Board (Besar & Jelas), Kanan Input (TurnHUD) -->
-      <div class="w-full flex flex-col md:flex-row landscape:flex-row items-center justify-center gap-3 lg:gap-6 flex-1 min-h-0">
-        <!-- SISI KIRI (LANDSCAPE / MD): Board Ludo (Besar & Jelas) -->
-        <div class="flex-1 w-full flex items-center justify-center min-w-0">
-          <div class="w-full max-w-[360px] sm:max-w-[440px] md:max-w-[540px] lg:max-w-[620px] max-h-[52vh] sm:max-h-[64vh] md:max-h-[82vh] landscape:max-h-[82vh] aspect-square flex items-center justify-center">
+      <!-- MODE BERMAIN: FIT 100% LAYAR, ZERO SCROLL, 2 KOLOM (KIRI BOARD, KANAN KEYPAD) -->
+      <div class="flex-1 min-h-0 w-full h-full grid grid-cols-2 gap-2 sm:gap-4 items-center overflow-hidden p-1">
+        <!-- KOLOM 1: BOARD (KIRI) -->
+        <div class="h-full w-full flex items-center justify-center min-w-0 min-h-0 overflow-hidden">
+          <div class="aspect-square h-full max-h-full max-w-full flex items-center justify-center">
             <BoardSvg
               players={currentRoom?.players ?? []}
               {tokens}
@@ -476,22 +585,24 @@
           </div>
         </div>
 
-        <!-- SISI KANAN (LANDSCAPE / MD): Panel Input & HUD Ramping -->
-        <div class="w-full max-w-sm sm:max-w-md md:w-[340px] lg:w-[380px] landscape:w-[310px] md:landscape:w-[350px] flex-shrink-0">
-          <TurnHUD
-            {activePlayer}
-            myPlayerId={sessionId}
-            {timeLeft}
-            {totalTimer}
-            {gameState}
-            {validTokenIds}
-            {currentChallenge}
-            {currentRoll}
-            minRange={currentRoom?.minRange ?? -20}
-            maxRange={currentRoom?.maxRange ?? 20}
-            onSpin={handleSpinDice}
-            onRoll={handleRollDice}
-          />
+        <!-- KOLOM 2: KEYPAD & TURNHUD (KANAN) -->
+        <div class="h-full w-full flex items-center justify-center min-w-0 min-h-0 overflow-hidden">
+          <div class="w-full max-w-[390px] max-h-full flex items-center justify-center">
+            <TurnHUD
+              {activePlayer}
+              myPlayerId={sessionId}
+              {timeLeft}
+              {totalTimer}
+              {gameState}
+              {validTokenIds}
+              {currentChallenge}
+              {currentRoll}
+              minRange={currentRoom?.minRange ?? -20}
+              maxRange={currentRoom?.maxRange ?? 20}
+              onSpin={handleSpinDice}
+              onRoll={handleRollDice}
+            />
+          </div>
         </div>
       </div>
     {:else if gameView === 'FINISHED'}
@@ -524,7 +635,7 @@
 
         <button
           onclick={leaveGame}
-          class="w-full py-3.5 bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 text-black font-black uppercase text-sm border-3 border-black shadow-[4px_4px_0px_#000] transition"
+          class="w-full py-3.5 bg-[#4ADE80] hover:bg-[#22C55E] active:translate-x-0.5 active:translate-y-0.5 text-black font-black uppercase text-sm border-3 border-black shadow-[4px_4px_0px_#000] transition cursor-pointer"
         >
           Kembali ke Menu Utama
         </button>
@@ -532,10 +643,12 @@
     {/if}
   </div>
 
-  <!-- Footer Info -->
-  <footer class="text-center py-4 text-xs font-black uppercase tracking-wider text-black">
-    SalisLudo &bull; Rentang angka -20 s.d. 20 &bull; 6 atau -6 giliran ekstra (3 detik)
-  </footer>
+  <!-- Footer Info (Hanya tampil di luar permainan agar 100% tinggi layar game tidak terpotong) -->
+  {#if gameView !== 'PLAYING'}
+    <footer class="text-center py-4 text-xs font-black uppercase tracking-wider text-black">
+      SalisLudo &bull; Rentang angka -20 s.d. 20 &bull; 6 atau -6 giliran ekstra (3 detik)
+    </footer>
+  {/if}
 
   <!-- Leaderboard Modal Dialog -->
   {#if showLeaderboard}
@@ -543,5 +656,29 @@
       leaderboard={leaderboardData}
       onClose={() => (showLeaderboard = false)}
     />
+  {/if}
+
+  <!-- Modal Hint Portrait Mode -->
+  {#if isPortrait && gameView === 'PLAYING'}
+    <div class="fixed inset-0 z-50 bg-black/85 flex flex-col items-center justify-center p-4 text-center text-white backdrop-blur-sm">
+      <div class="bg-white text-black border-4 border-black p-5 shadow-[6px_6px_0px_#FFE600] max-w-xs sm:max-w-sm space-y-3">
+        <div class="w-12 h-12 mx-auto bg-[#FFE600] border-2 border-black flex items-center justify-center">
+          <svg class="w-7 h-7 text-black animate-bounce" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+          </svg>
+        </div>
+        <h2 class="text-base font-black uppercase">Putar Layar ke Landscape</h2>
+        <p class="text-xs font-bold text-slate-700">
+          Math Ludo membutuhkan layar landscape (horizontal) agar board dan keypad pas 1 layar tanpa scroll.
+        </p>
+        <button
+          type="button"
+          onclick={requestLandscapeFullscreen}
+          class="w-full py-2.5 px-3 bg-[#FFE600] hover:bg-[#FDD835] active:translate-x-0.5 active:translate-y-0.5 border-2 border-black shadow-[2px_2px_0px_#000] font-black text-xs uppercase tracking-wider cursor-pointer"
+        >
+          Masuk Fullscreen Landscape
+        </button>
+      </div>
+    </div>
   {/if}
 </main>
