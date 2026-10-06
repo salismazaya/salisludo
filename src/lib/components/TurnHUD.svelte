@@ -360,7 +360,7 @@
             {#if currentRoll?.steps === 6}
               <div class="text-right">
                 <span class="text-[9px] font-black uppercase tracking-wider text-black bg-[#FFE600] px-1.5 py-0.5 border border-black shadow-[1px_1px_0px_#000]">
-                  Extra Turn!
+                  Extra Turn (Maks 3x)!
                 </span>
               </div>
             {/if}

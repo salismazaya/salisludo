@@ -16,6 +16,7 @@ export class LudoGame {
     this.currentChallenge = null;
     this.state = 'WAITING_FOR_SPIN'; // 'WAITING_FOR_SPIN' | 'WAITING_FOR_INPUT' | 'WAITING_FOR_MOVE' | 'FINISHED'
     this.winners = [];
+    this.consecutiveSixes = 0;
 
     // Initialize 4 tokens per player
     this.tokens = {};
@@ -153,13 +154,23 @@ export class LudoGame {
     }
 
     // Extra turn condition:
-    // 1) Rolled 6 or -6 (extraTurn)
+    // 1) Rolled 6 or -6 (extraTurn), tapi dibatasi maksimal 3x berturut-turut
     // 2) Captured an opponent's piece
     // 3) Successfully reached HOME
-    const getsBonus = this.pendingRoll.extraTurn || captured !== null || wasHome;
+    const isSixRoll = !!(this.pendingRoll?.extraTurn && this.pendingRoll?.steps === 6);
+    if (isSixRoll) {
+      this.consecutiveSixes += 1;
+    } else {
+      this.consecutiveSixes = 0;
+    }
+
+    // Jika sudah roll 6 sebanyak 3 kali berturut-turut, roll ke-3 tetap sah gerak, tetapi bonus giliran tidak diberikan lagi (pindah giliran)
+    const allowSixBonus = isSixRoll && this.consecutiveSixes < 3;
+    const allowOtherBonus = !isSixRoll && (captured !== null || wasHome);
+    const getsBonus = allowSixBonus || allowOtherBonus;
 
     if (getsBonus) {
-      if (this.pendingRoll.extraTurn) {
+      if (allowSixBonus) {
         // Roll 6 / -6: waktu dibagi dua (30 -> 15 -> 7), minimal 5 detik
         this.currentTurnTimer = Math.max(5, Math.floor(this.currentTurnTimer / 2));
       } else {
@@ -186,6 +197,7 @@ export class LudoGame {
   }
 
   nextTurn() {
+    this.consecutiveSixes = 0;
     this.currentTurnTimer = this.defaultTimer; // Reset ke waktu awal (misal 30 detik) saat pindah turn
     this.pendingRoll = null;
     this.currentChallenge = null;

@@ -646,7 +646,7 @@
   <!-- Footer Info (Hanya tampil di luar permainan agar 100% tinggi layar game tidak terpotong) -->
   {#if gameView !== 'PLAYING'}
     <footer class="text-center py-4 text-xs font-black uppercase tracking-wider text-black">
-      SalisLudo &bull; Rentang angka -20 s.d. 20 &bull; 6 atau -6 giliran ekstra (3 detik)
+      SalisLudo &bull; Rentang angka -20 s.d. 20 &bull; 6 atau -6 giliran ekstra (Maksimal 3x berturut-turut)
     </footer>
   {/if}
 

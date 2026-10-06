@@ -99,7 +99,7 @@ describe('LudoGame Engine (4 Players)', () => {
     expect(game.tokens['p2'][0].index).toBe(8);
   });
 
-  it('halves timer on consecutive 6s down to 5s min and allows moving pawn on 3rd+ roll', () => {
+  it('halves timer on consecutive 6s down to 5s min and caps extra turns at 3 consecutive sixes', () => {
     const game = new LudoGame({
       id: 'ROOM_1',
       defaultTimer: 30,
@@ -109,35 +109,31 @@ describe('LudoGame Engine (4 Players)', () => {
       ]
     });
 
-    // 1st six (initial timer 30)
+    // 1st six (initial timer 30) -> bonus turn granted
     expect(game.currentTurnTimer).toBe(30);
     const roll1 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
     expect(roll1.validTokenIds.length).toBeGreaterThan(0);
-    game.moveToken('p1', 0);
+    const res1 = game.moveToken('p1', 0);
+    expect(res1.extraTurn).toBe(true);
     expect(game.currentTurnPlayer.id).toBe('p1');
     expect(game.currentTurnTimer).toBe(15); // halved to 15s
 
-    // 2nd six (timer 15)
+    // 2nd six (timer 15) -> bonus turn granted
     const roll2 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
     expect(roll2.validTokenIds.length).toBeGreaterThan(0);
-    game.moveToken('p1', 0);
+    const res2 = game.moveToken('p1', 0);
+    expect(res2.extraTurn).toBe(true);
     expect(game.currentTurnPlayer.id).toBe('p1');
     expect(game.currentTurnTimer).toBe(7); // halved to 7s
 
-    // 3rd six (timer 7) -> pawn CAN move, moves to roll 4 with timer 5s
+    // 3rd six (timer 7) -> pawn moves, BUT extra turn is capped! Turn passes to p2
     const roll3 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
     expect(roll3.autoSkip).toBeFalsy();
     expect(roll3.validTokenIds.length).toBeGreaterThan(0);
-    game.moveToken('p1', 0);
-    expect(game.currentTurnPlayer.id).toBe('p1');
-    expect(game.currentTurnTimer).toBe(5); // halved to 5s (min 5s)
-
-    // 4th six (timer 5) -> stays at 5s min
-    const roll4 = game.applyRoll({ steps: 6, direction: 'FORWARD', extraTurn: true, raw: 6 });
-    expect(roll4.validTokenIds.length).toBeGreaterThan(0);
-    game.moveToken('p1', 0);
-    expect(game.currentTurnPlayer.id).toBe('p1');
-    expect(game.currentTurnTimer).toBe(5);
+    const res3 = game.moveToken('p1', 0);
+    expect(res3.extraTurn).toBe(false);
+    expect(game.currentTurnPlayer.id).toBe('p2'); // Turn passed to Bob!
+    expect(game.currentTurnTimer).toBe(30); // Reset to default timer for Bob
   });
 
   it('auto-skips when player has no valid moves (e.g. all in yard and roll is not 6)', () => {
